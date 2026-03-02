@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import tempfile
+import shutil
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -637,30 +638,41 @@ def main():
                     help="Select a previous project to load and edit. Projects are sorted by modification time (newest first)."
                 )
                 
-                # Load button
+                # Load/Remove buttons
                 if selected_display != "-- Select a project --":
-                    if st.button("📂 Load Selected Project", key="load_project_btn", width='stretch'):
-                        project = project_options[selected_display]
-                        
-                        # Load the project
-                        st.session_state.paper_id = project["id"]
-                        st.session_state.arxiv_id = None
-                        st.session_state.uploaded_pdf_path = None
-                        st.session_state.messages = []
-                        
-                        if project["has_pdf"]:
-                            # Project is ready for editing
-                            st.session_state.pipeline_status = "completed"
-                            st.session_state.pdf_path = project["pdf_path"]
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        if st.button("📂 Load Selected Project", key="load_project_btn", use_container_width=True):
+                            project = project_options[selected_display]
                             
-                            # Ensure initial history exists when loading project
-                            ensure_initial_history(project["id"])
-                        else:
-                            # Project needs compilation
-                            st.session_state.pipeline_status = "ready"
-                            st.session_state.pdf_path = None
-                        
-                        st.rerun()
+                            # Load the project
+                            st.session_state.paper_id = project["id"]
+                            st.session_state.arxiv_id = None
+                            st.session_state.uploaded_pdf_path = None
+                            st.session_state.messages = []
+                            
+                            if project["has_pdf"]:
+                                # Project is ready for editing
+                                st.session_state.pipeline_status = "completed"
+                                st.session_state.pdf_path = project["pdf_path"]
+                                
+                                # Ensure initial history exists when loading project
+                                ensure_initial_history(project["id"])
+                            else:
+                                # Project needs compilation
+                                st.session_state.pipeline_status = "ready"
+                                st.session_state.pdf_path = None
+                            
+                            st.rerun()
+                    with col2:
+                        with st.popover("🗑️", help="Remove this project", use_container_width=True):
+                            st.write("Confirm deletion?")
+                            project = project_options[selected_display]
+                            if st.button("Delete", type="primary", key=f"confirm_remove_{project['id']}", use_container_width=True):
+                                project_dir = os.path.join("source", project["id"])
+                                if os.path.exists(project_dir):
+                                    shutil.rmtree(project_dir)
+                                    st.rerun()
 
         st.header("Pipeline Settings")
         st.session_state.openai_api_key = st.text_input(
