@@ -244,7 +244,7 @@ def get_arxiv_id_from_query(query: str) -> str | None:
 def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: str | None = None, start_page: int | None = None, end_page: int | None = None, use_linter: bool = False, latex_zip_path: str | None = None) -> bool:
     """
     Step 1: Generate slides from arXiv paper, local PDF, or LaTeX zip
-    
+
     Args:
         paper_id: arXiv ID or generated ID for uploaded PDF/zip
         api_key: API key for LLM
@@ -492,14 +492,22 @@ def main():
             key="input_mode_radio"
         )
         
-        if input_mode == "arXiv Paper":
-            st.session_state.input_mode = "arxiv"
-        elif input_mode == "Upload PDF":
-            st.session_state.input_mode = "upload"
-        elif input_mode == "Upload LaTeX ZIP":
-            st.session_state.input_mode = "latex_zip"
-        else:
-            st.session_state.input_mode = "load"
+        new_mode = (
+            "arxiv" if input_mode == "arXiv Paper" else
+            "upload" if input_mode == "Upload PDF" else
+            "latex_zip" if input_mode == "Upload LaTeX ZIP" else
+            "load"
+        )
+        if new_mode != st.session_state.input_mode:
+            # Clear source paths that belong to the previous mode
+            st.session_state.uploaded_pdf_path = None
+            st.session_state.latex_zip_path = None
+            st.session_state.arxiv_id = None
+            st.session_state.paper_id = None
+            st.session_state.pdf_path = None
+            st.session_state.pipeline_status = "ready"
+            st.session_state.messages = []
+            st.session_state.input_mode = new_mode
         
         if st.session_state.input_mode == "arxiv":
             # arXiv search
@@ -1144,10 +1152,11 @@ def main():
                     st.session_state.paper_id,
                     st.session_state.openai_api_key,
                     st.session_state.model_name,
-                    st.session_state.uploaded_pdf_path,  # None for arXiv/zip
-                    st.session_state.pdf_start_page,  # Page range start
-                    st.session_state.pdf_end_page,     # Page range end
-                    latex_zip_path=st.session_state.latex_zip_path,  # None for arXiv/PDF
+                    # Only pass pdf/zip path when in the matching mode
+                    st.session_state.uploaded_pdf_path if st.session_state.input_mode == "upload" else None,
+                    st.session_state.pdf_start_page,
+                    st.session_state.pdf_end_page,
+                    latex_zip_path=st.session_state.latex_zip_path if st.session_state.input_mode == "latex_zip" else None,
                 )
 
                 if success:
