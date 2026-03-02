@@ -36,6 +36,7 @@ from src.compiler import compile_latex
 from src.core import (
     generate_slides,
     generate_slides_from_pdf,
+    generate_slides_from_latex_zip,
     generate_pdf_id,
     edit_slides,
     edit_single_slide,
@@ -324,6 +325,7 @@ async def generate_slides_task(
     source_type: str,
     api_key: Optional[str] = None,
     pdf_path: Optional[str] = None,
+    zip_path: Optional[str] = None,
     use_linter: bool = True,
     use_pdfcrop: bool = False,
     model_name: Optional[str] = None,
@@ -371,6 +373,20 @@ async def generate_slides_task(
                 start_page,
                 end_page,
                 workspace_dir,  # Pass workspace_dir to generate_slides_from_pdf
+            )
+        elif source_type == "latex_zip":
+            # LaTeX ZIP: same pipeline as arXiv, just from a local zip
+            logger.info(f"Generating slides for LaTeX zip {paper_id} in workspace {workspace_dir}")
+            success = await asyncio.to_thread(
+                generate_slides_from_latex_zip,
+                zip_path,
+                paper_id,
+                use_linter,
+                use_pdfcrop,
+                api_key,
+                model_name,
+                base_url,
+                workspace_dir,
             )
         else:
             raise ValueError(f"Unknown source type: {source_type}")
@@ -548,6 +564,73 @@ async def generate_from_pdf(
         raise
     except Exception as e:
         logger.error(f"Failed to create PDF job: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate/latex-zip", response_model=JobResponse, tags=["Generate"])
+async def generate_from_latex_zip(
+    background_tasks: BackgroundTasks,
+    user_id: str = Query(..., description="User ID for isolation"),
+    file: UploadFile = File(..., description="LaTeX project zip file to process"),
+    api_key: Optional[str] = Query(default=None, description="OpenAI/LLM API key"),
+    use_linter: bool = Query(default=True, description="Use ChkTeX linter"),
+    use_pdfcrop: bool = Query(default=False, description="Use pdfcrop"),
+    model_name: Optional[str] = Query(default=None, description="LLM model"),
+    base_url: Optional[str] = Query(default=None, description="Custom API base URL"),
+):
+    """
+    Generate slides from an uploaded LaTeX project zip file.
+
+    This is the same pipeline as /generate/arxiv — the only difference is that
+    the LaTeX source comes from the uploaded zip instead of being downloaded from
+    arXiv. The zip must contain a main .tex file with a \\documentclass directive.
+    Images/figures inside the zip are copied automatically.
+
+    Returns a job_id to track progress and download the result.
+    """
+    try:
+        if not file.filename.lower().endswith(".zip"):
+            raise HTTPException(status_code=400, detail="Only zip files are supported")
+
+        # Save uploaded zip to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+            content = await file.read()
+            tmp_file.write(content)
+            tmp_zip_path = tmp_file.name
+
+        # Derive a stable paper_id from the zip's content hash
+        import hashlib
+        zip_hash = hashlib.sha256(content).hexdigest()[:12]
+        paper_id = f"zip_{zip_hash}"
+
+        assigned_user_id, paper_id, workspace_dir = create_job(paper_id, "latex_zip", user_id)
+
+        background_tasks.add_task(
+            generate_slides_task,
+            user_id=assigned_user_id,
+            paper_id=paper_id,
+            workspace_dir=workspace_dir,
+            source_type="latex_zip",
+            api_key=api_key,
+            zip_path=tmp_zip_path,
+            use_linter=use_linter,
+            use_pdfcrop=use_pdfcrop,
+            model_name=model_name,
+            base_url=base_url,
+        )
+
+        job_key = (assigned_user_id, paper_id)
+        return JobResponse(
+            user_id=assigned_user_id,
+            paper_id=paper_id,
+            status=JobStatus.PENDING,
+            message=f"Job created for LaTeX zip upload (paper_id: {paper_id})",
+            created_at=jobs[job_key]["created_at"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create LaTeX zip job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/status/{user_id}/{paper_id}", response_model=JobStatusResponse, tags=["Jobs"])

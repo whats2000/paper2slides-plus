@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from src.core import (
     generate_slides,
     generate_slides_from_pdf,
+    generate_slides_from_latex_zip,
     compile_latex,
     search_arxiv,
     edit_slides,
@@ -240,21 +241,24 @@ def get_arxiv_id_from_query(query: str) -> str | None:
     return None
 
 
-def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: str | None = None, start_page: int | None = None, end_page: int | None = None, use_linter: bool = False) -> bool:
+def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: str | None = None, start_page: int | None = None, end_page: int | None = None, use_linter: bool = False, latex_zip_path: str | None = None) -> bool:
     """
-    Step 1: Generate slides from arXiv paper or local PDF
+    Step 1: Generate slides from arXiv paper, local PDF, or LaTeX zip
     
     Args:
-        paper_id: arXiv ID or generated ID for uploaded PDF
+        paper_id: arXiv ID or generated ID for uploaded PDF/zip
         api_key: API key for LLM
         model_name: Model name
-        pdf_path: Path to uploaded PDF file (None for arXiv papers)
+        pdf_path: Path to uploaded PDF file (None for arXiv papers / zip uploads)
         start_page: Starting page number (1-indexed, inclusive) for PDF processing
         end_page: Ending page number (1-indexed, inclusive) for PDF processing
         use_linter: Whether to enable the linter for auto-fixing LaTeX issues (default False)
+        latex_zip_path: Path to uploaded LaTeX zip file (None for arXiv/PDF sources)
     """
     logging.info("=" * 60)
-    if pdf_path:
+    if latex_zip_path:
+        logging.info("GENERATING SLIDES FROM UPLOADED LATEX ZIP")
+    elif pdf_path:
         logging.info("GENERATING SLIDES FROM UPLOADED PDF")
         if start_page or end_page:
             logging.info(f"Page range: {start_page or 1} to {end_page or 'end'}")
@@ -262,7 +266,16 @@ def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: st
         logging.info("GENERATING SLIDES FROM ARXIV PAPER")
     logging.info("=" * 60)
 
-    if pdf_path:
+    if latex_zip_path:
+        success = generate_slides_from_latex_zip(
+            zip_path=latex_zip_path,
+            paper_id=paper_id,
+            use_linter=use_linter,
+            api_key=api_key,
+            model_name=model_name,
+            base_url=st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+        )
+    elif pdf_path:
         success = generate_slides_from_pdf(
             pdf_path=pdf_path,
             paper_id=paper_id,
@@ -403,8 +416,10 @@ def main():
         st.session_state.paper_id = None
     if "uploaded_pdf_path" not in st.session_state:
         st.session_state.uploaded_pdf_path = None
+    if "latex_zip_path" not in st.session_state:
+        st.session_state.latex_zip_path = None
     if "input_mode" not in st.session_state:
-        st.session_state.input_mode = "arxiv"  # "arxiv", "upload", or "load"
+        st.session_state.input_mode = "arxiv"  # "arxiv", "upload", "latex_zip", or "load"
     if "pdf_path" not in st.session_state:
         st.session_state.pdf_path = None
     if "pipeline_status" not in st.session_state:
@@ -467,8 +482,13 @@ def main():
         # Input mode selection
         input_mode = st.radio(
             "Choose input method:",
-            options=["arXiv Paper", "Upload PDF", "Load Previous Project"],
-            index=0 if st.session_state.input_mode == "arxiv" else (1 if st.session_state.input_mode == "upload" else 2),
+            options=["arXiv Paper", "Upload PDF", "Upload LaTeX ZIP", "Load Previous Project"],
+            index=(
+                0 if st.session_state.input_mode == "arxiv" else
+                1 if st.session_state.input_mode == "upload" else
+                2 if st.session_state.input_mode == "latex_zip" else
+                3
+            ),
             key="input_mode_radio"
         )
         
@@ -476,6 +496,8 @@ def main():
             st.session_state.input_mode = "arxiv"
         elif input_mode == "Upload PDF":
             st.session_state.input_mode = "upload"
+        elif input_mode == "Upload LaTeX ZIP":
+            st.session_state.input_mode = "latex_zip"
         else:
             st.session_state.input_mode = "load"
         
@@ -605,6 +627,42 @@ def main():
                     except Exception as e:
                         st.error(f"Failed to read PDF: {e}")
         
+        elif st.session_state.input_mode == "latex_zip":
+            # LaTeX project ZIP upload — same pipeline as arXiv, just from a local source
+            uploaded_zip = st.file_uploader(
+                "Upload a LaTeX project zip",
+                type=["zip"],
+                key="latex_zip_uploader",
+                help="Upload a .zip containing a LaTeX project with a main .tex file (\\documentclass). Images/figures inside the zip are copied automatically.",
+            )
+
+            if uploaded_zip is not None and (
+                "uploaded_zip_name" not in st.session_state
+                or st.session_state.uploaded_zip_name != uploaded_zip.name
+            ):
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                    tmp_file.write(uploaded_zip.getvalue())
+                    tmp_zip_path = tmp_file.name
+
+                # Derive a stable paper_id from the zip's content hash
+                import hashlib
+                zip_hash = hashlib.sha256(uploaded_zip.getvalue()).hexdigest()[:12]
+                paper_id = f"zip_{zip_hash}"
+
+                st.session_state.latex_zip_path = tmp_zip_path
+                st.session_state.paper_id = paper_id
+                st.session_state.arxiv_id = None
+                st.session_state.uploaded_pdf_path = None
+                st.session_state.pdf_path = None
+                st.session_state.messages = []
+                st.session_state.pipeline_status = "ready"
+                st.session_state.uploaded_zip_name = uploaded_zip.name
+
+                st.success(f"ZIP uploaded! ID: {paper_id}")
+
+            if st.session_state.latex_zip_path:
+                st.info(f"📦 {st.session_state.get('uploaded_zip_name', 'zip file')} ready")
+
         else:
             # Load previous project
             existing_projects = get_existing_projects()
@@ -711,6 +769,8 @@ def main():
                 st.success(f"Selected arXiv: {st.session_state.paper_id}")
             elif st.session_state.input_mode == "upload":
                 st.success(f"Selected PDF: {st.session_state.paper_id}")
+            elif st.session_state.input_mode == "latex_zip":
+                st.success(f"Selected ZIP: {st.session_state.paper_id}")
             else:
                 st.success(f"Loaded Project: {st.session_state.paper_id}")
 
@@ -1084,9 +1144,10 @@ def main():
                     st.session_state.paper_id,
                     st.session_state.openai_api_key,
                     st.session_state.model_name,
-                    st.session_state.uploaded_pdf_path,  # None for arXiv papers
+                    st.session_state.uploaded_pdf_path,  # None for arXiv/zip
                     st.session_state.pdf_start_page,  # Page range start
                     st.session_state.pdf_end_page,     # Page range end
+                    latex_zip_path=st.session_state.latex_zip_path,  # None for arXiv/PDF
                 )
 
                 if success:

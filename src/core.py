@@ -431,6 +431,120 @@ def generate_slides(
     )
 
 
+def generate_slides_from_latex_zip(
+    zip_path: str,
+    paper_id: str,
+    use_linter: bool,
+    use_pdfcrop: bool = False,
+    api_key: str | None = None,
+    model_name: str | None = None,
+    base_url: str | None = None,
+    workspace_dir: str | None = None,
+) -> bool:
+    """
+    Generate slides from a locally uploaded LaTeX project zip file.
+
+    This is the same pipeline as generate_slides (arXiv) — the only difference
+    is that the LaTeX source comes from the uploaded zip instead of being
+    downloaded from arXiv.
+
+    Args:
+        zip_path: Path to the .zip file containing a LaTeX project
+        paper_id: Unique identifier for this upload
+        use_linter: Whether to use ChkTeX linter
+        use_pdfcrop: Whether to use pdfcrop (currently unused)
+        api_key: OpenAI/DashScope API key
+        model_name: Model to use for generation
+        base_url: Optional base URL for API
+        workspace_dir: Workspace directory (defaults to source/{paper_id}/)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    import tempfile
+    import zipfile
+
+    if model_name is None:
+        model_name = os.getenv("DEFAULT_MODEL", "gpt-4.1-2025-04-14")
+
+    if workspace_dir is None:
+        workspace_dir = f"source/{paper_id}/"
+
+    tex_files_directory = workspace_dir
+    slides_tex_path = f"{tex_files_directory}slides.tex"
+    os.makedirs(tex_files_directory, exist_ok=True)
+
+    # Extract zip and find the main .tex file (same as arXiv fetch, but local)
+    with tempfile.TemporaryDirectory() as extract_dir:
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+        except zipfile.BadZipFile as e:
+            logging.error(f"Failed to extract zip file: {e}")
+            return False
+
+        extract_path = Path(extract_dir)
+
+        # Descend into a single-folder root if present (common zip layout)
+        contents = list(extract_path.iterdir())
+        if len(contents) == 1 and contents[0].is_dir():
+            extract_path = contents[0]
+
+        # Find the main .tex file: the one that contains \documentclass
+        main_tex = None
+        for f in sorted(extract_path.rglob("*.tex")):
+            try:
+                text = f.read_text(encoding="utf-8", errors="ignore")
+                if r"\documentclass" in text:
+                    main_tex = f
+                    break
+            except Exception:
+                continue
+
+        if main_tex is None:
+            logging.error(r"No main .tex file with \documentclass found in the zip.")
+            return False
+
+        logging.info(f"Found main LaTeX file: {main_tex.name}")
+        latex_source = main_tex.read_text(encoding="utf-8", errors="ignore")
+
+        # Copy all image assets into workspace (mirrors copy_image_assets_from_cache)
+        image_extensions = {".pdf", ".png", ".jpeg", ".jpg", ".eps", ".svg"}
+        for img_file in extract_path.rglob("*"):
+            if img_file.suffix.lower() in image_extensions and img_file.is_file():
+                rel = img_file.relative_to(extract_path)
+                dest = Path(tex_files_directory) / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    shutil.copy2(img_file, dest)
+                except Exception as e:
+                    logging.debug(f"Skipped asset {img_file}: {e}")
+
+    # From here the flow is identical to generate_slides (arXiv path)
+    logging.info("Extracting definitions and packages...")
+    defs_pkgs = extract_definitions_and_usepackage_lines(latex_source)
+    add_tex_contents = build_additional_tex(defs_pkgs)
+    save_additional_tex(add_tex_contents, tex_files_directory)
+
+    save_latex_source(latex_source, tex_files_directory)
+
+    latex_source = add_additional_tex(latex_source)
+
+    figure_paths = find_image_files(tex_files_directory)
+
+    logging.info("Stage 1: generating slides from LaTeX zip source...")
+    return _generate_slides_with_stages(
+        latex_source,
+        tex_files_directory,
+        slides_tex_path,
+        figure_paths,
+        use_linter,
+        api_key,
+        model_name,
+        base_url,
+    )
+
+
 def generate_slides_from_pdf(
     pdf_path: str,
     paper_id: str,
@@ -743,6 +857,7 @@ def load_speaker_notes(paper_id: str, workspace_dir: str | None = None) -> dict[
 __all__ = [
     'generate_slides',
     'generate_slides_from_pdf',
+    'generate_slides_from_latex_zip',
     'edit_slides',
     'edit_single_slide',
     'compile_latex',
