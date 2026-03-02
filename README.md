@@ -1,9 +1,24 @@
-# paper2slides
+# paper2slides-plus
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4.1-412991.svg) ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg) ![arXiv](https://img.shields.io/badge/arXiv-papers-b31b1b.svg)
 
+This project is a further development based on the original [paper2slides](https://github.com/takashiishida/paper2slides). We appreciate the original takashiishida's work, but as it has stopped updating, this fork was created to provide rapid updates and new functionality.
 
-Transform any arXiv papers into slides using LLMs! This tool is useful for quickly grasping the main ideas of research papers. Some examples of generated slides are in the [Demo](demo/) directory.
+## New Features in `paper2slides-plus`
+
+1. **Fully support any PDF to slides**
+2. **Support single page editing**
+3. **Add correct LaTeX syntax feedback correction loop**
+4. **Speaker notes at PhD level**
+5. **Project management for multiple papers**
+6. **Edit version control**
+7. **`BASE_URL` overwrite for custom LLM providers**
+8. **An API version for integration with other apps**
+9. **Docker for easy deployment**
+
+---
+
+Transform any arXiv papers and PDFs into slides using LLMs! This tool is useful for quickly grasping the main ideas of research papers. Some examples of generated slides are in the [Demo](demo/) directory.
 
 ## Installation
 
@@ -12,24 +27,26 @@ Python 3.10 or higher is required.
 To install:
 
 1. Clone this repository:
-    ```sh
-    git clone https://github.com/takashiishida/paper2slides.git
-    cd paper2slides
-    ```
+
+   ```sh
+   git clone https://github.com/takashiishida/paper2slides.git
+   cd paper2slides
+   ```
 
 2. Install the required Python packages (using uv for faster and safer dependency resolution):
-    ```sh
-    pip install uv
-    uv pip install -r requirements.txt
-    ```
+
+   ```sh
+   pip install uv
+   uv pip install -r requirements.txt
+   ```
 
    Or using pip:
-    ```sh
-    pip install -r requirements.txt
-    ```
+
+   ```sh
+   pip install -r requirements.txt
+   ```
 
 3. Install a LaTeX distribution that includes `pdflatex`. Popular options include:
-
    - [MikTeX](https://miktex.org/) (recommended for Windows)
    - [TeX Live](https://www.tug.org/texlive/) (cross-platform)
 
@@ -39,10 +56,11 @@ To install:
 
 4. Configure environment variables (API keys, etc.):
 
-Copy `.env.example` to `.env` and fill in your API keys and settings.
-    ```sh
-    cp .env.example .env
-    ```
+   Copy `.env.example` to `.env` and fill in your API keys and settings.
+
+   ```sh
+   cp .env.example .env
+   ```
 
 ## Docker Setup
 
@@ -55,27 +73,31 @@ To avoid installing LaTeX and Python dependencies locally, you can use Docker fo
 1. Ensure Docker is installed on your system.
 
 2. Clone the repository and navigate to the directory:
-    ```sh
-    git clone https://github.com/takashiishida/paper2slides.git
-    cd paper2slides
-    ```
+
+   ```sh
+   git clone https://github.com/takashiishida/paper2slides.git
+   cd paper2slides
+   ```
 
 3. Set up your API keys in a `.env` file (see Configuration section above). For example:
-    ```sh
-    cp .env.example .env
-    # Then edit .env with your keys
-    ```
+
+   ```sh
+   cp .env.example .env
+   # Then edit .env with your keys
+   ```
 
 4. Build and run the Streamlit app using Docker Compose:
-    ```sh
-    docker-compose up paper2slides
-    ```
+
+   ```sh
+   docker-compose up paper2slides
+   ```
 
    This will start the Streamlit app on `http://localhost:8501`.
 
    The `source` and `cache` directories are mounted as volumes to persist generated files.
 
 Alternatively, build and run manually:
+
 ```sh
 docker build -t paper2slides .
 docker run -p 8501:8501 -v $(pwd)/source:/app/source -v $(pwd)/cache:/app/cache -e OPENAI_API_KEY=your-api-key paper2slides
@@ -86,9 +108,10 @@ docker run -p 8501:8501 -v $(pwd)/source:/app/source -v $(pwd)/cache:/app/cache 
 For programmatic access or integration with other applications, use the FastAPI service.
 
 1. Build and run the API service:
-    ```sh
-    docker-compose up paper2slides-api -d
-    ```
+
+   ```sh
+   docker-compose up paper2slides-api -d
+   ```
 
    This will start the API on `http://localhost:8000`.
 
@@ -162,6 +185,7 @@ The ID can be identified from the URL: the ID for `https://arxiv.org/abs/xxxx.xx
 For local PDF files, use the `--pdf` flag followed by the path to your PDF file.
 
 The underlying `tex2beamer.py` and `beamer2pdf.py` scripts handle the core functionality:
+
 - `tex2beamer.py` downloads and processes the arXiv paper using `arxiv-to-prompt`, then generates Beamer slides via OpenAI API
 - `beamer2pdf.py` compiles the LaTeX slides to PDF using pdflatex
 
@@ -180,7 +204,9 @@ The prompts are now managed through a YAML-based system in `prompts/config.yaml`
 You can customize the prompts by editing `prompts/config.yaml`. The system automatically handles figure path insertion and other dynamic content. The `PromptManager` class in `prompts/manager.py` handles template rendering and validation.
 
 ### Web UI
+
 Run the Streamlit app for a point-and-click experience:
+
 ```bash
 streamlit run app.py
 ```
