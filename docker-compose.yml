@@ -63,6 +63,7 @@ services:
     restart: unless-stopped
 
   # YOLO11 Document Layout service for ML-based figure extraction
+  # Note: This is much accurate than the pdffigures2 but require GPU for fast extraction
   yolo11-doc-layout:
     image: paper2slides-yolo11-doc-layout:latest
     build:

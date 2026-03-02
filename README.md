@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4.1-412991.svg) ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg) ![arXiv](https://img.shields.io/badge/arXiv-papers-b31b1b.svg)
 
-This project is a further development based on the original [paper2slides](https://github.com/takashiishida/paper2slides). We appreciate the original takashiishida's work, but as it has stopped updating, this fork was created to provide rapid updates and new functionality.
+This project is a further development based on the original [paper2slides](https://github.com/takashiishida/paper2slides). We appreciate the original [takashiishida](https://github.com/takashiishida)'s work, but as it has stopped updating, this fork was created to provide rapid updates and new functionality.
 
 ## New Features in `paper2slides-plus`
 
@@ -29,9 +29,13 @@ To install:
 1. Clone this repository:
 
    ```sh
-   git clone https://github.com/takashiishida/paper2slides.git
-   cd paper2slides
+   git clone --recursive https://github.com/whats2000/paper2slides-plus.git
+   cd paper2slides-plus
    ```
+
+   > [!NOTE]
+   > If you already cloned the repository without the `--recursive` flag, you can initialize the submodules by running:
+   > `git submodule update --init --recursive`
 
 2. Install the required Python packages (using uv for faster and safer dependency resolution):
 
@@ -75,9 +79,13 @@ To avoid installing LaTeX and Python dependencies locally, you can use Docker fo
 2. Clone the repository and navigate to the directory:
 
    ```sh
-   git clone https://github.com/takashiishida/paper2slides.git
-   cd paper2slides
+   git clone --recursive https://github.com/whats2000/paper2slides-plus.git
+   cd paper2slides-plus
    ```
+
+   > [!NOTE]
+   > If you already cloned the repository without the `--recursive` flag, you can initialize the submodules by running:
+   > `git submodule update --init --recursive`
 
 3. Set up your API keys in a `.env` file (see Configuration section above). For example:
 
