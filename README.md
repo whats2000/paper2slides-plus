@@ -1,5 +1,7 @@
 # paper2slides-plus
 
+[English](README.md) | [繁體中文](README_zh-TW.md) | [简体中文](README_zh-CN.md) | [日本語](README_ja.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4.1-412991.svg) ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg) ![arXiv](https://img.shields.io/badge/arXiv-papers-b31b1b.svg)
 
 This project is a further development based on the original [paper2slides](https://github.com/takashiishida/paper2slides). We appreciate the original [takashiishida](https://github.com/takashiishida)'s work, but as it has stopped updating, this fork was created to provide rapid updates and new functionality.
