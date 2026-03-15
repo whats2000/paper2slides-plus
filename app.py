@@ -1087,7 +1087,12 @@ def main():
                     help=editor_help,
                 )
 
-                if st.button("💾 Save Source Changes", key=f"save_source_changes_{st.session_state.edit_mode}"):
+                manual_save_disabled = st.session_state.get("pending_edit") is not None
+                if st.button(
+                    "💾 Save Source Changes",
+                    key=f"save_source_changes_{st.session_state.edit_mode}",
+                    disabled=manual_save_disabled,
+                ):
                     if st.session_state.edit_mode == "full":
                         if edited_source == beamer_code:
                             st.info("No changes detected in slides.tex.")
@@ -1181,74 +1186,20 @@ def main():
                 # Add message with appropriate prefix
                 if st.session_state.edit_mode == "single":
                     append_chat_message("user", f"[Page {current_frame}] {prompt}")
+                    st.session_state.pending_edit = {
+                        "frame_number": current_frame,
+                        "instruction": prompt,
+                        "mode": "single",
+                        "already_logged": True,
+                    }
                 else:
                     append_chat_message("user", f"[All Slides] {prompt}")
-
-                with st.chat_message("assistant"):
-                    if st.session_state.edit_mode == "single":
-                        with st.spinner(f"Editing slide {current_frame}..."):
-                            slides_tex_path = (
-                                f"source/{st.session_state.paper_id}/slides.tex"
-                            )
-                            with open(slides_tex_path, "r", encoding='utf-8') as f:
-                                beamer_code = f.read()
-
-                            # Edit single slide based on current page
-                            new_beamer_code = edit_single_slide(
-                                beamer_code,
-                                current_frame,
-                                prompt,
-                                st.session_state.openai_api_key,
-                                st.session_state.model_name,
-                                st.session_state.openai_base_url if st.session_state.openai_base_url else None,
-                                paper_id=st.session_state.paper_id,
-                                use_paper_context=st.session_state.use_paper_context,
-                            )
-                            edit_message = f"Edited slide {current_frame}"
-                    else:
-                        with st.spinner("Editing all slides..."):
-                            slides_tex_path = (
-                                f"source/{st.session_state.paper_id}/slides.tex"
-                            )
-                            with open(slides_tex_path, "r", encoding='utf-8') as f:
-                                beamer_code = f.read()
-
-                            # Edit all slides
-                            new_beamer_code = edit_slides(
-                                beamer_code,
-                                prompt,
-                                st.session_state.openai_api_key,
-                                st.session_state.model_name,
-                                st.session_state.openai_base_url if st.session_state.openai_base_url else None,
-                                paper_id=st.session_state.paper_id,
-                                use_paper_context=st.session_state.use_paper_context,
-                            )
-                            edit_message = "Edited all slides"
-
-                    if new_beamer_code:
-                        with open(slides_tex_path, "w", encoding='utf-8') as f:
-                            f.write(new_beamer_code)
-                        st.info(f"{edit_message}. Recompiling PDF with changes...")
-                        if run_compile_step(
-                            st.session_state.paper_id,
-                            st.session_state.pdflatex_path,
-                        ):
-                            # Update current version tracker to the latest (newly saved) version
-                            history_mgr = get_history_manager(st.session_state.paper_id)
-                            latest_versions = history_mgr.list_versions()
-                            if latest_versions:
-                                current_version_key = f"current_version_{st.session_state.paper_id}"
-                                st.session_state[current_version_key] = latest_versions[0]['filename']
-                            
-                            st.success(f"✅ {edit_message}. PDF recompiled successfully!")
-                            st.session_state.pdf_path = (
-                                f"source/{st.session_state.paper_id}/slides.pdf"
-                            )
-                            st.rerun()
-                        else:
-                            st.error("Failed to recompile PDF.")
-                    else:
-                        st.error("Failed to edit slides.")
+                    st.session_state.pending_edit = {
+                        "instruction": prompt,
+                        "mode": "full",
+                        "already_logged": True,
+                    }
+                st.rerun()
             
             # Handle pending edit from inline edit boxes (full page view)
             if st.session_state.get("pending_edit"):
@@ -1256,23 +1207,46 @@ def main():
                 st.session_state.pending_edit = None  # Clear it
                 
                 # Append to chat history
-                append_chat_message("user", f"[Page {edit_info['frame_number']}] {edit_info['instruction']}", display=False)
+                if not edit_info.get("already_logged", False):
+                    if edit_info.get("mode") == "full":
+                        append_chat_message("user", f"[All Slides] {edit_info['instruction']}", display=False)
+                    else:
+                        append_chat_message("user", f"[Page {edit_info['frame_number']}] {edit_info['instruction']}", display=False)
                 
-                with st.spinner(f"Editing slide {edit_info['frame_number']}..."):
+                spinner_label = "Editing all slides..." if edit_info.get("mode") == "full" else f"Editing slide {edit_info['frame_number']}..."
+
+                with st.spinner(spinner_label):
                     slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
                     with open(slides_tex_path, "r", encoding='utf-8') as f:
                         beamer_code = f.read()
 
-                    new_beamer_code = edit_single_slide(
-                        beamer_code,
-                        edit_info['frame_number'],
-                        edit_info['instruction'],
-                        st.session_state.openai_api_key,
-                        st.session_state.model_name,
-                        st.session_state.openai_base_url if st.session_state.openai_base_url else None,
-                        paper_id=st.session_state.paper_id,
-                        use_paper_context=st.session_state.use_paper_context,
-                    )
+                    if edit_info.get("mode") == "full":
+                        new_beamer_code = edit_slides(
+                            beamer_code,
+                            edit_info['instruction'],
+                            st.session_state.openai_api_key,
+                            st.session_state.model_name,
+                            st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+                            paper_id=st.session_state.paper_id,
+                            use_paper_context=st.session_state.use_paper_context,
+                        )
+                        success_message = "✅ Edited all slides successfully!"
+                        failed_recompile_message = "❌ Failed to recompile PDF after editing all slides."
+                        failed_edit_message = "❌ Failed to edit all slides."
+                    else:
+                        new_beamer_code = edit_single_slide(
+                            beamer_code,
+                            edit_info['frame_number'],
+                            edit_info['instruction'],
+                            st.session_state.openai_api_key,
+                            st.session_state.model_name,
+                            st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+                            paper_id=st.session_state.paper_id,
+                            use_paper_context=st.session_state.use_paper_context,
+                        )
+                        success_message = f"✅ Edited slide {edit_info['frame_number']} successfully!"
+                        failed_recompile_message = f"❌ Failed to recompile PDF after editing slide {edit_info['frame_number']}."
+                        failed_edit_message = f"❌ Failed to edit slide {edit_info['frame_number']}."
                     
                     if new_beamer_code:
                         with open(slides_tex_path, "w", encoding='utf-8') as f:
@@ -1290,18 +1264,18 @@ def main():
                                 st.session_state[current_version_key] = latest_versions[0]['filename']
                             
                             # Append assistant response to chat history
-                            append_chat_message("assistant", f"✅ Edited slide {edit_info['frame_number']} successfully!", display=False)
+                            append_chat_message("assistant", success_message, display=False)
                             
-                            st.success(f"✅ Edited slide {edit_info['frame_number']} successfully!")
+                            st.success(success_message)
                             st.session_state.pdf_path = (
                                 f"source/{st.session_state.paper_id}/slides.pdf"
                             )
                             st.rerun()
                         else:
-                            append_chat_message("assistant", f"❌ Failed to recompile PDF after editing slide {edit_info['frame_number']}.", display=False)
+                            append_chat_message("assistant", failed_recompile_message, display=False)
                             st.error("Failed to recompile PDF.")
                     else:
-                        append_chat_message("assistant", f"❌ Failed to edit slide {edit_info['frame_number']}.", display=False)
+                        append_chat_message("assistant", failed_edit_message, display=False)
                         st.error("Failed to edit slide.")
         else:
             st.info(
