@@ -3,6 +3,45 @@
 import re
 
 
+def _parse_overlay_spec_max(spec: str) -> int:
+    """Return the maximum explicit overlay index found in a Beamer overlay spec."""
+    max_overlay = 0
+    for part in spec.split(','):
+        token = part.strip()
+        if not token:
+            continue
+
+        # Handle range forms like 2-5, 2-, or -5.
+        if '-' in token:
+            range_match = re.fullmatch(r'(\d+)?-(\d+)?', token)
+            if range_match:
+                start_str, end_str = range_match.groups()
+                if end_str:
+                    max_overlay = max(max_overlay, int(end_str))
+                elif start_str:
+                    max_overlay = max(max_overlay, int(start_str))
+                continue
+
+        # Handle single number forms like 3.
+        if token.isdigit():
+            max_overlay = max(max_overlay, int(token))
+
+    return max_overlay
+
+
+def _count_frame_pages(frame_content: str) -> int:
+    """Estimate how many PDF pages a Beamer frame expands to via overlay specs."""
+    max_overlay = 1
+
+    # Common overlay syntax appears as <...> after a command or a begin{...} block.
+    overlay_pattern = r'(?:\\[a-zA-Z*]+(?:\[[^\]]*\])?|\\begin\{[^}]+\})<([^>]+)>'
+    for overlay_match in re.finditer(overlay_pattern, frame_content):
+        spec = overlay_match.group(1)
+        max_overlay = max(max_overlay, _parse_overlay_spec_max(spec))
+
+    return max_overlay
+
+
 def extract_frames_from_beamer(beamer_code: str) -> list[tuple[int, str, int, int]]:
     """
     Extract all frames from Beamer code.
@@ -39,8 +78,12 @@ def extract_frames_from_beamer(beamer_code: str) -> list[tuple[int, str, int, in
         frame_content = match.group(0)
         start_pos = match.start()
         end_pos = match.end()
-        frame_number = len(frames) + 1
-        frames.append((frame_number, frame_content, start_pos, end_pos))
+        frame_pages = _count_frame_pages(frame_content)
+
+        # Duplicate frame mapping for each overlay page so numbering aligns with PDF pages.
+        for _ in range(frame_pages):
+            frame_number = len(frames) + 1
+            frames.append((frame_number, frame_content, start_pos, end_pos))
     
     return frames
 
