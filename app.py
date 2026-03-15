@@ -20,11 +20,14 @@ from src.core import (
     edit_slides,
     edit_single_slide,
     extract_frames_from_beamer,
+    get_frame_by_number,
+    replace_frame_in_beamer,
     generate_pdf_id,
     generate_speaker_notes,
     save_speaker_notes,
     load_speaker_notes,
 )
+from src.beamer_utils import get_preamble, replace_preamble
 from src.history import get_history_manager
 
 
@@ -92,6 +95,59 @@ def get_existing_projects():
     # Sort by modification time (newest first)
     projects.sort(key=lambda x: x["modified_time"], reverse=True)
     return projects
+
+
+def get_single_page_edit_source(beamer_code: str, frame_number: int) -> tuple[str | None, str, str]:
+    """
+    Extract single-page edit source using the same logic as AI single-slide editing.
+
+    Page 1 maps to preamble editing; other pages map to frame extraction.
+    Returns (source_content, editor_label, editor_help).
+    """
+    if frame_number == 1:
+        return (
+            get_preamble(beamer_code),
+            "Slide 1 source (preamble)",
+            "For slide 1, manual edits apply to the preamble (title/author/theme configuration).",
+        )
+
+    return (
+        get_frame_by_number(beamer_code, frame_number),
+        f"Slide {frame_number} source",
+        "Manual edits apply only to the currently selected slide source.",
+    )
+
+
+def apply_single_page_source_edit(beamer_code: str, frame_number: int, edited_source: str) -> str | None:
+    """
+    Apply single-page source edits using the same replacement logic as AI single-slide editing.
+
+    Page 1 updates preamble; other pages replace the selected frame.
+    """
+    if frame_number == 1:
+        return replace_preamble(beamer_code, edited_source)
+
+    return replace_frame_in_beamer(beamer_code, frame_number, edited_source)
+
+
+def get_current_viewer_page(total_frames: int | None = None) -> int:
+    """
+    Resolve the current page from viewer state for editing context.
+
+    Prefer the slider value when available, and keep selected_frame_number synchronized.
+    """
+    current_page = st.session_state.get(
+        "pdf_page_slider",
+        st.session_state.get("selected_frame_number", 1),
+    )
+
+    if total_frames and total_frames > 0:
+        current_page = max(1, min(int(current_page), total_frames))
+    else:
+        current_page = max(1, int(current_page))
+
+    st.session_state.selected_frame_number = current_page
+    return current_page
 
 
 def append_chat_message(role: str, content: str, display: bool = True):
@@ -992,10 +1048,123 @@ def main():
             
             # Show info based on mode
             if st.session_state.edit_mode == "single":
-                current_page = st.session_state.get("selected_frame_number", 1)
+                current_page = get_current_viewer_page(st.session_state.total_frames)
                 st.info(f"🎯 Editing will only affect slide {current_page} (current page in viewer)")
             else:
                 st.info("📄 Editing will affect all slides in the presentation")
+
+            with st.expander("✏️ Edit Source (manual)", expanded=False):
+                st.caption("Directly edit LaTeX source. Changes are saved to slides.tex and compiled.")
+
+                current_page = get_current_viewer_page(st.session_state.total_frames)
+                file_mtime = int(os.path.getmtime(slides_tex_path)) if os.path.exists(slides_tex_path) else 0
+
+                if st.session_state.edit_mode == "full":
+                    editor_value = beamer_code
+                    editor_label = "Full slides.tex"
+                    editor_help = "Manual edits apply to the entire presentation source."
+                    editor_key = f"manual_source_full_{st.session_state.paper_id}_{file_mtime}"
+                else:
+                    source_content, editor_label, editor_help = get_single_page_edit_source(
+                        beamer_code,
+                        current_page,
+                    )
+                    if not source_content:
+                        if current_page == 1:
+                            st.error("Could not find preamble source for slide 1.")
+                        else:
+                            st.error(f"Could not find source for slide {current_page}.")
+                        editor_value = ""
+                    else:
+                        editor_value = source_content
+                    editor_key = f"manual_source_single_{st.session_state.paper_id}_{current_page}_{file_mtime}"
+
+                edited_source = st.text_area(
+                    editor_label,
+                    value=editor_value,
+                    height=360,
+                    key=editor_key,
+                    help=editor_help,
+                )
+
+                if st.button("💾 Save Source Changes", key=f"save_source_changes_{st.session_state.edit_mode}"):
+                    if st.session_state.edit_mode == "full":
+                        if edited_source == beamer_code:
+                            st.info("No changes detected in slides.tex.")
+                        else:
+                            with open(slides_tex_path, "w", encoding="utf-8") as f:
+                                f.write(edited_source)
+
+                            st.info("Saved source changes. Recompiling PDF...")
+                            if run_compile_step(
+                                st.session_state.paper_id,
+                                st.session_state.pdflatex_path,
+                            ):
+                                history_mgr = get_history_manager(st.session_state.paper_id)
+                                latest_versions = history_mgr.list_versions()
+                                if latest_versions:
+                                    current_version_key = f"current_version_{st.session_state.paper_id}"
+                                    st.session_state[current_version_key] = latest_versions[0]["filename"]
+
+                                st.success("✅ Source updated and PDF recompiled successfully!")
+                                st.session_state.pdf_path = (
+                                    f"source/{st.session_state.paper_id}/slides.pdf"
+                                )
+                                st.rerun()
+                            else:
+                                st.error("Failed to recompile PDF after saving source edits.")
+                    else:
+                        current_source, _, _ = get_single_page_edit_source(beamer_code, current_page)
+                        if not current_source:
+                            if current_page == 1:
+                                st.error("Could not find preamble source for slide 1.")
+                            else:
+                                st.error(f"Could not find source for slide {current_page}.")
+                        elif edited_source == current_source:
+                            if current_page == 1:
+                                st.info("No changes detected for slide 1 preamble source.")
+                            else:
+                                st.info(f"No changes detected for slide {current_page} source.")
+                        else:
+                            updated_beamer_code = apply_single_page_source_edit(
+                                beamer_code,
+                                current_page,
+                                edited_source,
+                            )
+                            if not updated_beamer_code:
+                                if current_page == 1:
+                                    st.error("Failed to apply source update to slide 1 preamble.")
+                                else:
+                                    st.error(f"Failed to apply source update to slide {current_page}.")
+                            else:
+                                with open(slides_tex_path, "w", encoding="utf-8") as f:
+                                    f.write(updated_beamer_code)
+
+                                if current_page == 1:
+                                    st.info("Saved slide 1 preamble source changes. Recompiling PDF...")
+                                else:
+                                    st.info(f"Saved slide {current_page} source changes. Recompiling PDF...")
+
+                                if run_compile_step(
+                                    st.session_state.paper_id,
+                                    st.session_state.pdflatex_path,
+                                ):
+                                    history_mgr = get_history_manager(st.session_state.paper_id)
+                                    latest_versions = history_mgr.list_versions()
+                                    if latest_versions:
+                                        current_version_key = f"current_version_{st.session_state.paper_id}"
+                                        st.session_state[current_version_key] = latest_versions[0]["filename"]
+
+                                    if current_page == 1:
+                                        st.success("✅ Slide 1 preamble source updated and PDF recompiled successfully!")
+                                    else:
+                                        st.success(f"✅ Slide {current_page} source updated and PDF recompiled successfully!")
+                                    st.session_state.pdf_path = (
+                                        f"source/{st.session_state.paper_id}/slides.pdf"
+                                    )
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to recompile PDF after saving source edits.")
 
             st.divider()
 
@@ -1007,7 +1176,7 @@ def main():
             # Chat input
             if prompt := st.chat_input("Your instructions to edit the slides..."):
                 # Determine which frame to edit
-                current_frame = st.session_state.get("selected_frame_number", 1)
+                current_frame = get_current_viewer_page(st.session_state.total_frames)
                 
                 # Add message with appropriate prefix
                 if st.session_state.edit_mode == "single":
