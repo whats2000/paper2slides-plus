@@ -249,3 +249,9 @@ The unified `paper2slides.py` script automates the entire process, typically com
 ## Notable Forks
 
 - **[paper2slides-plus](https://github.com/whats2000/paper2slides-plus)** - Enhanced version with support for local PDFs, custom model providers, advanced editing features, and REST API capabilities.
+
+## Acknowledgments
+
+This project is built upon the excellent work of the original [paper2slides](https://github.com/takashiishida/paper2slides) project created by [takashiishida](https://github.com/takashiishida). We are grateful for the innovative approach of converting research papers to presentation slides using LLMs, which serves as the foundation for this fork.
+
+**paper2slides-plus** extends the original work with additional features and improvements to support a broader range of use cases and workflows. The core concept and methodology remain rooted in the original project's excellent design.
