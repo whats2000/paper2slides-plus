@@ -16,6 +16,7 @@ from .arxiv_utils import (
 )
 from .beamer_utils import (
     extract_frames_from_beamer,
+    annotate_overlay_frames,
     get_frame_by_number,
     get_preamble,
     replace_frame_in_beamer,
@@ -705,18 +706,22 @@ def generate_speaker_notes(
         logging.warning(f"No original paper source found for paper {paper_id}")
         latex_source = ""
 
-    # Extract all frames to know how many slides we have
+    # Extract all frames to know how many PDF pages we have (overlay frames are duplicated).
     frames = extract_frames_from_beamer(beamer_code)
     if not frames:
         logging.error("No frames found in Beamer code")
         return None
 
-    logging.info(f"Found {len(frames)} slides. Generating speaker notes in a single call...")
+    # Annotate overlay frames with a comment hint so the LLM writes a separate
+    # speaker note per PDF page without us touching any LaTeX content.
+    annotated_beamer_code = annotate_overlay_frames(beamer_code)
+
+    logging.info(f"Found {len(frames)} PDF pages. Generating speaker notes in a single call...")
 
     # Use PromptManager to get prompts (no frame-specific info needed)
     system_message, user_prompt = prompt_manager.build_prompt(
         stage="generate_speaker_notes",
-        beamer_code=beamer_code,
+        beamer_code=annotated_beamer_code,
         latex_source=latex_source,
         user_instructions=instruction,
     )

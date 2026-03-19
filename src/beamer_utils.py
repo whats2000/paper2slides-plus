@@ -42,6 +42,54 @@ def _count_frame_pages(frame_content: str) -> int:
     return max_overlay
 
 
+def annotate_overlay_frames(beamer_code: str) -> str:
+    """
+    Prepend an informational comment before every frame that uses overlay specs
+    (e.g. \\only<N>, \\uncover<N>, \\visible<N>) so that an LLM knows to write
+    a separate speaker note for each overlay page.
+
+    The frame content itself is **not modified** — only a comment is injected::
+
+        % [SPEAKER NOTES HINT: this frame spans 3 PDF pages due to overlays.
+        %  Please write 3 separate notes: [SLIDE N], [SLIDE N+1], [SLIDE N+2].]
+        \\begin{frame}{...}
+          ...
+        \\end{frame}
+
+    Frames with no overlay specs are left completely unchanged.
+    """
+    frame_re = re.compile(r'\\begin\{frame\}.*?\\end\{frame\}', re.DOTALL)
+
+    result_parts = []
+    last_end = 0
+    # Track cumulative PDF page number so hints reference the correct [SLIDE N] numbers.
+    pdf_page = 0
+
+    for m in frame_re.finditer(beamer_code):
+        result_parts.append(beamer_code[last_end:m.start()])
+        frame_content = m.group(0)
+        num_pages = _count_frame_pages(frame_content)
+        pdf_page_start = pdf_page + 1
+        pdf_page += num_pages
+
+        if num_pages > 1:
+            slide_nums = ', '.join(
+                f'[SLIDE {pdf_page_start + i}]' for i in range(num_pages)
+            )
+            comment = (
+                f'% [SPEAKER NOTES HINT: This frame renders as {num_pages} PDF pages due to'
+                f' \\only overlay specs.\n'
+                f'%  Write {num_pages} separate notes: {slide_nums}.]\n'
+            )
+            result_parts.append(comment)
+
+        result_parts.append(frame_content)
+        last_end = m.end()
+
+    result_parts.append(beamer_code[last_end:])
+    return ''.join(result_parts)
+
+
 def extract_frames_from_beamer(beamer_code: str) -> list[tuple[int, str, int, int]]:
     """
     Extract all frames from Beamer code.
