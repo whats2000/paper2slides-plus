@@ -35,9 +35,9 @@ Python 3.10 以上が必要です。
    cd paper2slides-plus
    ```
 
-   > [!NOTE]
-   > `--recursive` フラグなしで既にクローンしている場合は、次のコマンドを実行してサブモジュールを初期化できます:
-   > `git submodule update --init --recursive`
+ > [!NOTE]
+ > `--recursive` フラグなしで既にクローンしている場合は、次のコマンドを実行してサブモジュールを初期化できます:
+ > `git submodule update --init --recursive`
 
 2. 必要なPythonパッケージをインストールします（より高速で安全な依存関係解決のために uv の使用を推奨）:
 
@@ -85,9 +85,9 @@ paper2slides は Streamlit Web アプリケーションと REST API サービス
    cd paper2slides-plus
    ```
 
-   > [!NOTE]
-   > `--recursive` フラグなしで既にクローンしている場合は、次のコマンドを実行してサブモジュールを初期化できます:
-   > `git submodule update --init --recursive`
+ > [!NOTE]
+ > `--recursive` フラグなしで既にクローンしている場合は、次のコマンドを実行してサブモジュールを初期化できます:
+ > `git submodule update --init --recursive`
 
 3. `.env` ファイルに API キーを設定します（上の構成セクションを参照）。例:
 

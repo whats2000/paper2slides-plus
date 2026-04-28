@@ -35,9 +35,9 @@
    cd paper2slides-plus
    ```
 
-   > [!NOTE]
-   > 如果您之前未加上 `--recursive` 參數就進行了複製，您可以透過執行以下命令來初始化子模組：
-   > `git submodule update --init --recursive`
+ > [!NOTE]
+ > 如果您之前未加上 `--recursive` 參數就進行了複製，您可以透過執行以下命令來初始化子模組：
+ > `git submodule update --init --recursive`
 
 2. 安裝必要的 Python 套件（推薦使用 uv 以獲得更快且更安全的相依性解析）：
 
@@ -85,9 +85,9 @@ paper2slides 為 Streamlit 網路應用程式和 REST API 服務提供了 Docker
    cd paper2slides-plus
    ```
 
-   > [!NOTE]
-   > 如果您之前未加上 `--recursive` 參數就進行了複製，您可以透過執行以下命令來初始化子模組：
-   > `git submodule update --init --recursive`
+ > [!NOTE]
+ > 如果您之前未加上 `--recursive` 參數就進行了複製，您可以透過執行以下命令來初始化子模組：
+ > `git submodule update --init --recursive`
 
 3. 在 `.env` 檔案中設定您的 API 金鑰（請參閱上方的設定章節）。例如：
 

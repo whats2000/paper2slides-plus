@@ -35,9 +35,9 @@ To install:
    cd paper2slides-plus
    ```
 
-   > [!NOTE]
-   > If you already cloned the repository without the `--recursive` flag, you can initialize the submodules by running:
-   > `git submodule update --init --recursive`
+> [!NOTE]
+> If you already cloned the repository without the `--recursive` flag, you can initialize the submodules by running:
+> `git submodule update --init --recursive`
 
 2. Install the required Python packages (using uv for faster and safer dependency resolution):
 
@@ -85,9 +85,9 @@ To avoid installing LaTeX and Python dependencies locally, you can use Docker fo
    cd paper2slides-plus
    ```
 
-   > [!NOTE]
-   > If you already cloned the repository without the `--recursive` flag, you can initialize the submodules by running:
-   > `git submodule update --init --recursive`
+> [!NOTE]
+> If you already cloned the repository without the `--recursive` flag, you can initialize the submodules by running:
+> `git submodule update --init --recursive`
 
 3. Set up your API keys in a `.env` file (see Configuration section above). For example:
 
