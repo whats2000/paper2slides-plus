@@ -1173,6 +1173,21 @@ def main():
 
             st.divider()
 
+            # Chat history header with clear button
+            chat_header_col1, chat_header_col2 = st.columns([4, 1])
+            with chat_header_col1:
+                st.subheader(f"💬 Chat History ({len(st.session_state.messages)})")
+            with chat_header_col2:
+                if st.button(
+                    "🗑️ Clear",
+                    key="clear_chat_history",
+                    help="Clear chat history (UI only, does not affect slides)",
+                    disabled=not st.session_state.messages,
+                    width='stretch',
+                ):
+                    st.session_state.messages = []
+                    st.rerun()
+
             # Display chat messages
             for message in st.session_state.messages:
                 with st.chat_message(message["role"]):
