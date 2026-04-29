@@ -208,19 +208,27 @@ stages:
       Now, provide the full, updated LaTeX source code for the Beamer presentation. Start with ```latex, provide the code, and end with ```.
 
   interactive_edit_preamble:
-    system: "You are a professional assistant specialized in LaTeX and Beamer. Your task is to edit the preamble (title page configuration and document setup) of a Beamer presentation."
+    system: "You are a professional assistant specialized in LaTeX and Beamer. Your task is to edit the preamble code and title page frame of a Beamer presentation."
     template: |
-      You are given a Beamer presentation preamble and instructions to edit it.
-      The preamble includes: title, author, date, packages, theme settings, and style configurations.
-      
+      You are given the preamble code and title page frame of a Beamer presentation and instructions to edit them.
+      Together they produce the PDF page-1 render. The input always includes the preamble
+      (\\documentclass, \\usepackage, \\usetheme, \\title, \\author, \\date, and style settings),
+      and — when the title page is rendered by a real \\begin{{frame}}{{}}\\titlepage...\\end{{frame}} —
+      it also includes \\begin{{document}} and that title page frame. For presentations that use a
+      bare \\maketitle (no title page frame in the input), the input is the preamble only and ends
+      just before \\begin{{document}}.
+
       IMPORTANT Instructions:
-      - Output ONLY the updated preamble code in a single ```latex block.
-      - The preamble is everything BEFORE \\begin{{document}}.
-      - Include \\documentclass, \\usepackage, \\usetheme, \\title, \\author, \\date, and all style settings.
-      - Do NOT include \\begin{{document}}, \\maketitle, frame content, or \\end{{document}}.
+      - Output ONLY the updated preamble code and title page frame in a single ```latex block.
+      - You MUST preserve every structural element that was present in the input, in the same
+        order. If the input contains \\begin{{document}} and a title page frame, your output MUST
+        also contain \\begin{{document}} and that \\begin{{frame}}...\\end{{frame}}. Do NOT drop them.
+      - If the input ends just before \\begin{{document}} (preamble-only case), your output must end
+        the same way; do NOT introduce \\begin{{document}}, \\maketitle, or any frame.
+      - Do NOT include any later frames or \\end{{document}}.
       - Maintain proper LaTeX structure and ensure all packages needed are included.
       - When changing themes/colors, ensure they are valid Beamer themes.
-      
+
       User Instructions:
       "{user_instructions}"
 
@@ -230,10 +238,12 @@ stages:
       Full presentation context (for reference):
       {beamer_code}
 
-      Current preamble to edit:
+      Current preamble code and title page frame to edit:
       {frame_content}
 
-      Now provide the edited preamble: start with ```latex, provide the complete preamble code (ending just before \\begin{{document}}), and end with ```.
+      Now provide the edited preamble code and title page frame: start with ```latex, provide the
+      complete content (matching the structure of the input — preamble only, or preamble +
+      \\begin{{document}} + title page frame), and end with ```.
 
   interactive_edit_single_slide:
     system: "You are a professional assistant specialized in LaTeX and Beamer. Your task is to edit a specific slide/frame in a Beamer presentation based on user instructions."

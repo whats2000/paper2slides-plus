@@ -159,38 +159,68 @@ def get_frame_by_number(beamer_code: str, frame_number: int) -> str | None:
     return None
 
 
+def _page_one_end(beamer_code: str) -> int | None:
+    """
+    Return the cut position that ends PDF page 1 in the source.
+
+    - If the first real frame is the title frame (i.e. the page-1 render comes
+      from ``\\begin{frame}{}\\titlepage...\\end{frame}``), the cut is just after
+      its ``\\end{frame}`` so page 1 covers preamble + first frame.
+    - Otherwise (synthetic ``\\maketitle`` case, or no frames at all), the cut
+      is just before ``\\begin{document}`` so page 1 covers the preamble only.
+
+    Returns ``None`` if neither anchor can be found.
+    """
+    frames = extract_frames_from_beamer(beamer_code)
+    if frames and frames[0][1].strip() != r'\maketitle':
+        return frames[0][3]
+    match = re.search(r'^(.*?)\\begin\{document\}', beamer_code, re.DOTALL)
+    if match:
+        return match.end(1)
+    return None
+
+
 def get_preamble(beamer_code: str) -> str | None:
     """
-    Extract the preamble (everything before \\begin{document}) from Beamer code.
-    This includes title, author, date, packages, and style configurations.
+    Extract the source region that renders as PDF page 1 of the Beamer document.
+
+    This is the preamble (title, author, date, packages, style configurations,
+    etc.) and — when the title page is a real ``\\begin{frame}{}\\titlepage``
+    frame — that first frame as well, since both halves combine to produce the
+    page-1 render. For the synthetic ``\\maketitle`` case, only the preamble is
+    returned (matching the historical behavior).
     
     Args:
         beamer_code: Full Beamer LaTeX code
-        
+
     Returns:
-        Preamble content (everything before \\begin{document}), or None if not found
+        Page-1 source block, or None if the structure cannot be parsed.
     """
-    match = re.search(r'^(.*?)\\begin\{document\}', beamer_code, re.DOTALL)
-    if match:
-        return match.group(1)
-    return None
+    cut = _page_one_end(beamer_code)
+    if cut is None:
+        return None
+    return beamer_code[:cut]
 
 
 def replace_preamble(beamer_code: str, new_preamble: str) -> str | None:
     """
-    Replace the preamble (everything before \\begin{document}) with new content.
-    
+    Replace the page-1 source block (see ``get_preamble``) with new content.
+
+    The replacement must include the same structural elements as the original —
+    typically preamble + ``\\begin{document}`` + first title frame, or just the
+    preamble in the synthetic ``\\maketitle`` case.
+
     Args:
         beamer_code: Full Beamer LaTeX code
-        new_preamble: New preamble content (should NOT include \\begin{document})
-        
+        new_preamble: New page-1 source block
+
     Returns:
-        Updated Beamer code with the preamble replaced, or None if \\begin{document} not found
+        Updated Beamer code, or None if the structure cannot be parsed.
     """
-    match = re.search(r'^(.*?)(\\begin\{document\}.*)$', beamer_code, re.DOTALL)
-    if match:
-        return new_preamble + match.group(2)
-    return None
+    cut = _page_one_end(beamer_code)
+    if cut is None:
+        return None
+    return new_preamble + beamer_code[cut:]
 
 
 def replace_frame_in_beamer(beamer_code: str, frame_number: int, new_frame_content: str) -> str | None:
