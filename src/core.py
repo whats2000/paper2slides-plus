@@ -1075,7 +1075,6 @@ def load_speaker_notes(
             data = json.load(f)
         # Convert string keys back to integers
         speaker_notes = {int(k): v for k, v in data.items()}
-        logging.info(f"✓ Loaded speaker notes from {notes_file}")
         return speaker_notes
     except Exception as e:
         logging.error(f"Failed to load speaker notes: {e}")
