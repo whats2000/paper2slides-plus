@@ -178,6 +178,18 @@ def edit_single_slide(
         else:
             logging.debug(f"No original paper source found for paper {paper_id}")
 
+    # Snapshot frame layout before edit so we can shift speaker_notes.json
+    # keys correctly afterwards. We need the full PDF-page range owned by the
+    # frame env that contains `frame_number`, not just the page itself —
+    # `replace_frame_in_beamer` rewrites the whole \begin{frame}…\end{frame}
+    # block, which for an overlay frame spans multiple PDF pages that all
+    # share the same (start_pos, end_pos). The shift has to span that range.
+    pre_edit_frames = extract_frames_from_beamer(beamer_code)
+    old_frame_count = len(pre_edit_frames)
+    replaced_lo, replaced_hi = _resolve_replaced_page_range(
+        pre_edit_frames, frame_number
+    )
+
     # Special case: frame_number == 1 means edit the preamble (title configuration)
     if frame_number == 1:
         frame_content = get_preamble(beamer_code)
@@ -251,6 +263,16 @@ def edit_single_slide(
 
             if compiled_code:
                 logging.info("✓ Single slide edit successful and compiled")
+                if frame_number != 1:
+                    new_frame_count = len(extract_frames_from_beamer(compiled_code))
+                    _shift_speaker_notes_after_frame_edit(
+                        paper_id,
+                        workspace_dir,
+                        replaced_lo,
+                        replaced_hi,
+                        old_frame_count,
+                        new_frame_count,
+                    )
                 return compiled_code
             else:
                 logging.error(
@@ -259,11 +281,100 @@ def edit_single_slide(
                 return None
         else:
             # No paper_id, return without compiling
+            if frame_number != 1:
+                new_frame_count = len(extract_frames_from_beamer(updated_beamer_code))
+                _shift_speaker_notes_after_frame_edit(
+                    paper_id,
+                    workspace_dir,
+                    replaced_lo,
+                    replaced_hi,
+                    old_frame_count,
+                    new_frame_count,
+                )
             return updated_beamer_code
 
     except Exception as e:
         logging.error(f"Error editing single slide: {e}")
         return None
+
+
+def _resolve_replaced_page_range(
+    pre_edit_frames: list[tuple[int, str, int, int]],
+    frame_number: int,
+) -> tuple[int, int]:
+    """Find the contiguous PDF-page range owned by the frame env containing `frame_number`.
+
+    `extract_frames_from_beamer` emits one entry per PDF page. For an overlay frame
+    that produces multiple PDF pages from a single \\begin{frame}…\\end{frame} block,
+    those entries share the same (start_pos, end_pos). When that env is replaced,
+    every PDF page in the range is replaced — so the speaker-notes shift has to
+    span the whole range, not just `frame_number`.
+
+    For a non-overlay frame the range is simply (frame_number, frame_number).
+
+    Returns (lo, hi) inclusive PDF page numbers. Falls back to (frame_number,
+    frame_number) if the entry can't be located (defensive — shouldn't happen
+    in practice since `replace_frame_in_beamer` was about to be called on it).
+    """
+    target = next((f for f in pre_edit_frames if f[0] == frame_number), None)
+    if target is None:
+        return frame_number, frame_number
+    _, _, start_pos, end_pos = target
+    siblings = [f[0] for f in pre_edit_frames if f[2] == start_pos and f[3] == end_pos]
+    return min(siblings), max(siblings)
+
+
+def _shift_speaker_notes_after_frame_edit(
+    paper_id: str,
+    workspace_dir: str | None,
+    replaced_lo: int,
+    replaced_hi: int,
+    old_frame_count: int,
+    new_frame_count: int,
+) -> None:
+    """Shift speaker_notes.json keys after a frame env spanning PDF pages
+    [replaced_lo, replaced_hi] was replaced with a different number of pages.
+
+    Pages outside the replaced range are unchanged in content but their
+    numbering shifts when the deck grows or shrinks. Pages inside the range
+    were entirely rewritten (the frame env was substituted), so their notes
+    are dropped — refining will fill them in by content.
+
+    Behavior:
+      - notes[k] for k < replaced_lo  : kept (positions before the edit are stable)
+      - notes[k] for replaced_lo..hi  : dropped (frame env content was replaced)
+      - notes[k] for k > replaced_hi  : shifted to k + delta, where
+                                        delta = new_frame_count - old_frame_count
+
+    No-ops when paper_id is missing, no notes file exists, or delta == 0 AND
+    nothing in the replaced range had notes.
+    """
+    if not paper_id:
+        return
+    notes = load_speaker_notes(paper_id, workspace_dir)
+    if not notes:
+        return
+
+    delta = new_frame_count - old_frame_count
+    has_notes_in_range = any(replaced_lo <= k <= replaced_hi for k in notes)
+    if delta == 0 and not has_notes_in_range:
+        return  # truly nothing to do
+
+    new_notes: dict[int, str] = {}
+    for k, v in notes.items():
+        if k < replaced_lo:
+            new_notes[k] = v
+        elif k <= replaced_hi:
+            continue  # this PDF page's frame env was replaced; note no longer applies
+        else:
+            new_notes[k + delta] = v
+
+    if save_speaker_notes(new_notes, paper_id, workspace_dir):
+        logging.info(
+            f"Shifted speaker notes after frame edit: replaced PDF pages "
+            f"[{replaced_lo}-{replaced_hi}]; old_total={old_frame_count}, "
+            f"new_total={new_frame_count}, delta={delta:+d}"
+        )
 
 
 def _generate_slides_with_stages(
@@ -685,6 +796,7 @@ def generate_speaker_notes(
     base_url: str | None = None,
     instruction: str = "",
     workspace_dir: str | None = None,
+    refine_existing: bool = True,
 ) -> dict[int, str] | None:
     """
     Generate speaker notes for all slides in a presentation using a single LLM call.
@@ -696,6 +808,8 @@ def generate_speaker_notes(
         base_url: Optional base URL for API
         instruction: Optional custom instruction for speaker note generation
         workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
+        refine_existing: If True and a previous speaker_notes.json exists, pass the
+            existing notes to the LLM as a draft to refine; otherwise generate from scratch.
 
     Returns:
         Dictionary mapping frame number to speaker notes, or None on error
@@ -731,17 +845,37 @@ def generate_speaker_notes(
     # speaker note per PDF page without us touching any LaTeX content.
     annotated_beamer_code = annotate_overlay_frames(beamer_code)
 
-    logging.info(
-        f"Found {len(frames)} PDF pages. Generating speaker notes in a single call..."
+    # Decide between generate-from-scratch and edit-existing flows.
+    prior_notes = (
+        load_speaker_notes(paper_id, workspace_dir) if refine_existing else None
     )
 
-    # Use PromptManager to get prompts (no frame-specific info needed)
-    system_message, user_prompt = prompt_manager.build_prompt(
-        stage="generate_speaker_notes",
-        beamer_code=annotated_beamer_code,
-        latex_source=latex_source,
-        user_instructions=instruction,
-    )
+    if prior_notes:
+        formatted_prior = "\n\n".join(
+            f"[SLIDE {n}]\n{prior_notes[n]}" for n in sorted(prior_notes.keys())
+        )
+        logging.info(
+            f"Found {len(frames)} current slide(s); refining {len(prior_notes)} prior speaker note(s) via edit prompt."
+        )
+        system_message, user_prompt = prompt_manager.build_prompt(
+            stage="edit_speaker_notes",
+            beamer_code=annotated_beamer_code,
+            latex_source=latex_source,
+            user_instructions=instruction,
+            existing_notes=formatted_prior,
+            frame_count=len(frames),
+            prior_count=len(prior_notes),
+        )
+    else:
+        logging.info(
+            f"Found {len(frames)} PDF pages. Generating speaker notes from scratch in a single call..."
+        )
+        system_message, user_prompt = prompt_manager.build_prompt(
+            stage="generate_speaker_notes",
+            beamer_code=annotated_beamer_code,
+            latex_source=latex_source,
+            user_instructions=instruction,
+        )
 
     logging.debug("LLM user prompt for speaker notes:\n%s", user_prompt)
 
@@ -851,6 +985,66 @@ def save_speaker_notes(
         return False
 
 
+def save_speaker_notes_with_history(
+    speaker_notes: dict[int, str],
+    paper_id: str,
+    workspace_dir: str | None = None,
+    description: str = "Speaker notes updated",
+) -> bool:
+    """
+    Save speaker notes to disk AND snapshot a history version that bundles the
+    current slides.tex with the just-saved notes.
+
+    Use this whenever speaker notes change without an accompanying compile —
+    e.g. after generation or after manual edits in the UI — so the version
+    history stays a true record of (tex, notes) pairs and a future restore
+    reproduces both sides faithfully.
+
+    Falls back gracefully: if writing notes succeeds but snapshotting fails or
+    slides.tex is missing, returns True for the save and logs a warning. The
+    caller should treat the notes as saved.
+
+    Args:
+        speaker_notes: Dictionary mapping frame number to speaker notes
+        paper_id: Paper ID
+        workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
+        description: Description recorded with the new history version
+
+    Returns:
+        True if speaker notes were saved (snapshot is best-effort), False on save failure.
+    """
+    if not save_speaker_notes(speaker_notes, paper_id, workspace_dir):
+        return False
+
+    if workspace_dir is None:
+        workspace_dir = f"source/{paper_id}/"
+    slides_tex_path = f"{workspace_dir}slides.tex"
+    if not os.path.exists(slides_tex_path):
+        logging.debug(f"Skipping history snapshot for {paper_id}: slides.tex not found")
+        return True
+
+    try:
+        with open(slides_tex_path, "r", encoding="utf-8") as f:
+            tex_content = f.read()
+    except Exception as e:
+        logging.warning(
+            f"Saved speaker notes but failed to read slides.tex for snapshot: {e}"
+        )
+        return True
+
+    try:
+        from .history import get_history_manager
+
+        history = get_history_manager(paper_id, workspace_dir)
+        history.save_version(tex_content, description, speaker_notes=speaker_notes)
+    except Exception as e:
+        logging.warning(
+            f"Saved speaker notes but failed to record history snapshot: {e}"
+        )
+
+    return True
+
+
 def load_speaker_notes(
     paper_id: str, workspace_dir: str | None = None
 ) -> dict[int, str] | None:
@@ -905,5 +1099,6 @@ __all__ = [
     "extract_images_from_pdf",
     "generate_speaker_notes",
     "save_speaker_notes",
+    "save_speaker_notes_with_history",
     "load_speaker_notes",
 ]

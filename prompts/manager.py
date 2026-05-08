@@ -211,6 +211,7 @@ class PromptManager:
             "interactive_edit_preamble",
             "interactive_edit_single_slide",
             "generate_speaker_notes",
+            "edit_speaker_notes",
         ],
         latex_source: str = "",
         beamer_code: str = "",
@@ -219,6 +220,9 @@ class PromptManager:
         user_instructions: str = "",
         frame_number: int | None = None,
         frame_content: str = "",
+        existing_notes: str = "",
+        frame_count: int | None = None,
+        prior_count: int | None = None,
     ) -> tuple[str, str]:
         """
         Build (system_message, rendered_prompt) for the given stage.
@@ -252,6 +256,13 @@ class PromptManager:
             variables["beamer_code"] = beamer_code
             variables["latex_source"] = latex_source
             variables["user_instructions"] = user_instructions
+        elif stage == "edit_speaker_notes":
+            variables["beamer_code"] = beamer_code
+            variables["latex_source"] = latex_source
+            variables["user_instructions"] = user_instructions
+            variables["existing_notes"] = existing_notes
+            variables["frame_count"] = frame_count if frame_count is not None else 0
+            variables["prior_count"] = prior_count if prior_count is not None else 0
 
         system_message = self.get_system_message(stage)
         user_prompt = self.get_prompt(stage, **variables)

@@ -41,7 +41,7 @@ from src.core import (
     edit_slides,
     edit_single_slide,
     generate_speaker_notes,
-    save_speaker_notes,
+    save_speaker_notes_with_history,
     load_speaker_notes,
 )
 from src.file_utils import read_file
@@ -311,6 +311,10 @@ class SpeakerNotesRequest(BaseModel):
     api_key: Optional[str] = Field(default=None, description="API key (optional)")
     model_name: Optional[str] = Field(default=None, description="LLM model to use")
     base_url: Optional[str] = Field(default=None, description="Custom API base URL")
+    refine_existing: bool = Field(
+        default=True,
+        description="If True and prior speaker_notes.json exists, refine those notes instead of regenerating from scratch",
+    )
 
 
 # Helper functions
@@ -1072,6 +1076,11 @@ async def generate_speaker_notes_endpoint(
             "DEFAULT_MODEL", "gpt-4.1-2025-04-14"
         )
 
+        # Capture whether prior notes existed so we can label the history snapshot
+        # accurately. We must check BEFORE generation/save, because the post-save
+        # file always exists.
+        had_prior_notes = os.path.exists(f"{workspace_dir}speaker_notes.json")
+
         # Generate speaker notes
         notes = await asyncio.to_thread(
             generate_speaker_notes,
@@ -1081,6 +1090,7 @@ async def generate_speaker_notes_endpoint(
             request.base_url,
             request.instruction,
             workspace_dir,
+            request.refine_existing,
         )
 
         if not notes:
@@ -1088,8 +1098,16 @@ async def generate_speaker_notes_endpoint(
                 status_code=500, detail="Failed to generate speaker notes"
             )
 
-        # Save speaker notes
-        save_speaker_notes(notes, paper_id, workspace_dir)
+        # Save speaker notes and snapshot history (so a later restore reproduces
+        # the matching tex+notes pair instead of leaving them out of sync).
+        snapshot_desc = (
+            "Refined speaker notes"
+            if (request.refine_existing and had_prior_notes)
+            else "Generated speaker notes"
+        )
+        save_speaker_notes_with_history(
+            notes, paper_id, workspace_dir, description=snapshot_desc
+        )
 
         return {
             "success": True,

@@ -317,3 +317,48 @@ stages:
       {beamer_code}
       
       Now generate speaker notes for ALL slides in a natural, conversational presentation style using the format specified above.
+
+  edit_speaker_notes:
+    system: "You are a PhD student revising your own speaker notes for a research presentation. You are given a previous draft and instructions to refine it. EDIT the notes — keep what works, fix what doesn't, apply the new instructions. The slide deck may have changed since the draft was written."
+    template: |
+      You are revising a previous draft of speaker notes for these research slides. Your job is to EDIT the existing notes — preserve what works, fix what doesn't, and apply the new user instructions.
+
+      User Instructions (how to refine the notes):
+      "{user_instructions}"
+
+      IMPORTANT — The slide deck may have changed since the draft was written:
+      - The presentation now has {frame_count} slide(s) total. The previous draft covered {prior_count} slide(s).
+      - Slides may have been added, removed, reordered, or split.
+      - Match each prior note to the current slide it best fits BY CONTENT, not by slide number.
+      - For any current slide with no matching prior note, write a NEW note in the same conversational style.
+      - For prior notes whose slide no longer exists, drop them.
+      - You MUST output notes for ALL {frame_count} current slides, numbered 1 through {frame_count}.
+
+      Style Guidelines (apply consistently — both when keeping prior notes and when writing fresh ones):
+      - First person, conversational ("Let me show you...", "Notice that...", "So what's interesting is...")
+      - Explain WHY, not just WHAT. Anticipate audience questions.
+      - Connect ideas across slides ("Building on the previous slide...", "Remember when we...")
+      - 2-4 sentences per slide. Natural speech, not slide description.
+
+      OUTPUT FORMAT:
+
+      [SLIDE 1]
+      What you would say when presenting slide 1...
+
+      [SLIDE 2]
+      What you would say when presenting slide 2...
+
+      And so on for ALL {frame_count} slides. Include a [SLIDE N] marker for every slide.
+
+      Previous Draft of Speaker Notes (revise these):
+      ---
+      {existing_notes}
+      ---
+
+      Original Paper Content (for technical details):
+      {latex_source}
+
+      Full Presentation (Beamer Code — current version):
+      {beamer_code}
+
+      Now provide the revised speaker notes for ALL {frame_count} current slides using the [SLIDE N] format above.

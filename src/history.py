@@ -2,6 +2,11 @@
 Version history management for Paper2Slides.
 Saves working versions after successful PDF compilations.
 Allows reverting to previous working versions when LLM edits fail.
+
+Each version snapshot bundles both the LaTeX source and any associated
+speaker_notes.json so restoring a version keeps the two artifacts in
+lockstep — without this, restoring an older deck would leave today's
+speaker notes attached to the wrong slide numbers.
 """
 
 import json
@@ -27,11 +32,36 @@ class VersionHistory:
         # Determine workspace directory
         if workspace_dir is None:
             workspace_dir = f"source/{paper_id}/"
-        self.history_dir = Path(workspace_dir) / "edit_history"
+        self.workspace_dir = Path(workspace_dir)
+        self.history_dir = self.workspace_dir / "edit_history"
         self.history_dir.mkdir(parents=True, exist_ok=True)
 
+    @property
+    def _speaker_notes_path(self) -> Path:
+        return self.workspace_dir / "speaker_notes.json"
+
+    def _load_workspace_speaker_notes(self) -> Optional[Dict[str, str]]:
+        """Load the current speaker_notes.json, or None if missing/unreadable.
+
+        Returned dict uses string keys (matching the on-disk JSON shape) so it
+        round-trips through json.dump cleanly.
+        """
+        path = self._speaker_notes_path
+        if not path.exists():
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {str(k): v for k, v in data.items()}
+        except Exception as e:
+            logging.error(f"Failed to read speaker_notes.json for snapshot: {e}")
+            return None
+
     def save_version(
-        self, tex_content: str, description: str = "Successful compile"
+        self,
+        tex_content: str,
+        description: str = "Successful compile",
+        speaker_notes: Optional[Dict] = None,
     ) -> bool:
         """
         Save a new version after successful compilation.
@@ -39,6 +69,9 @@ class VersionHistory:
         Args:
             tex_content: The LaTeX content to save
             description: Description of this version
+            speaker_notes: Optional speaker notes dict to bundle with this version.
+                If None, the current speaker_notes.json on disk (if any) is captured
+                automatically so callers don't have to thread the data through.
 
         Returns:
             True if successful, False otherwise
@@ -48,17 +81,27 @@ class VersionHistory:
             # Use timestamp as filename for easy sorting
             timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
 
+            if speaker_notes is None:
+                snapshot_notes = self._load_workspace_speaker_notes()
+            else:
+                snapshot_notes = {str(k): v for k, v in speaker_notes.items()}
+
             version_data = {
                 "timestamp": timestamp.isoformat(),
                 "description": description,
                 "tex_content": tex_content,
+                "speaker_notes": snapshot_notes,  # may be None for decks without notes yet
             }
 
             version_file = self.history_dir / f"version_{timestamp_str}.json"
             with open(version_file, "w", encoding="utf-8") as f:
-                json.dump(version_data, f, indent=2)
+                json.dump(version_data, f, indent=2, ensure_ascii=False)
 
-            logging.info(f"Saved version: {description} at {timestamp_str}")
+            note_count = len(snapshot_notes) if snapshot_notes else 0
+            logging.info(
+                f"Saved version: {description} at {timestamp_str} "
+                f"(speaker notes bundled: {note_count})"
+            )
             return True
 
         except Exception as e:
@@ -157,7 +200,17 @@ class VersionHistory:
 
     def restore_version(self, filename: str, slides_tex_path: str) -> bool:
         """
-        Restore a specific version to slides.tex.
+        Restore a specific version to slides.tex AND its bundled speaker_notes.json.
+
+        Restoration semantics:
+          - tex_content is always written back to slides.tex.
+          - If the version has a 'speaker_notes' field (new format):
+              * non-null dict -> overwrite speaker_notes.json with the snapshot
+              * null         -> remove speaker_notes.json (snapshot recorded "no notes")
+          - If the version has no 'speaker_notes' field (legacy snapshot from before
+            this feature existed): leave the current speaker_notes.json alone — we
+            don't know what was paired with that older deck, and silently wiping
+            user-edited notes would be a worse failure than a stale-but-present file.
 
         Args:
             filename: The version filename to restore
@@ -166,19 +219,57 @@ class VersionHistory:
         Returns:
             True if successful, False otherwise
         """
-        content = self.get_version_by_filename(filename)
-        if content is None:
+        version_file = self.history_dir / filename
+        if not version_file.exists():
             logging.error(f"Version {filename} not found")
             return False
 
         try:
-            with open(slides_tex_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            logging.info(f"Restored version {filename} to {slides_tex_path}")
-            return True
+            with open(version_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
         except Exception as e:
-            logging.error(f"Failed to restore version: {e}")
+            logging.error(f"Failed to read version {filename}: {e}")
             return False
+
+        tex_content = data.get("tex_content")
+        if tex_content is None:
+            logging.error(f"Version {filename} has no tex_content")
+            return False
+
+        try:
+            with open(slides_tex_path, "w", encoding="utf-8") as f:
+                f.write(tex_content)
+            logging.info(f"Restored slides.tex from version {filename}")
+        except Exception as e:
+            logging.error(f"Failed to restore slides.tex: {e}")
+            return False
+
+        if "speaker_notes" in data:
+            snapshot_notes = data["speaker_notes"]
+            try:
+                if snapshot_notes:
+                    with self._speaker_notes_path.open("w", encoding="utf-8") as f:
+                        json.dump(snapshot_notes, f, indent=2, ensure_ascii=False)
+                    logging.info(
+                        f"Restored speaker_notes.json from version {filename} "
+                        f"({len(snapshot_notes)} entries)"
+                    )
+                else:
+                    if self._speaker_notes_path.exists():
+                        self._speaker_notes_path.unlink()
+                        logging.info(
+                            f"Removed speaker_notes.json (version {filename} had none bundled)"
+                        )
+            except Exception as e:
+                logging.error(f"Failed to restore speaker_notes.json: {e}")
+                return False
+        else:
+            logging.debug(
+                f"Version {filename} predates speaker-note tracking; leaving "
+                "current speaker_notes.json untouched."
+            )
+
+        return True
 
     def delete_version(self, filename: str) -> bool:
         """

@@ -24,7 +24,7 @@ from src.core import (
     replace_frame_in_beamer,
     generate_pdf_id,
     generate_speaker_notes,
-    save_speaker_notes,
+    save_speaker_notes_with_history,
     load_speaker_notes,
 )
 from src.beamer_utils import get_preamble, replace_preamble
@@ -60,6 +60,26 @@ def extract_title_from_latex(latex_file_path: str) -> str:
     except Exception as e:
         logging.warning(f"Failed to extract title from {latex_file_path}: {e}")
         return None
+
+
+def _pin_active_version(paper_id: str) -> None:
+    """Pin the UI's "Active" version pointer to the latest history snapshot.
+
+    Call this after any operation that creates a new version (slide edits,
+    speaker-notes saves, refines) so the Versions panel shows the snapshot
+    we just wrote as Active rather than leaving the pointer on a stale entry.
+    """
+    if not paper_id:
+        return
+    try:
+        history_mgr = get_history_manager(paper_id)
+        latest_versions = history_mgr.list_versions()
+        if latest_versions:
+            st.session_state[f"current_version_{paper_id}"] = latest_versions[0][
+                "filename"
+            ]
+    except Exception as e:
+        logging.debug(f"Failed to pin active version for {paper_id}: {e}")
 
 
 def get_existing_projects():
@@ -178,6 +198,47 @@ def display_pdf(file_path):
     st.markdown(pdf_display, unsafe_allow_html=True)
 
 
+def _open_pdf_with_retry(
+    file_path: str, attempts: int = 6, delay_seconds: float = 0.25
+):
+    """Open a PDF, retrying briefly while it's still being written.
+
+    pdflatex writes the .pdf in chunks; if Streamlit reruns mid-write (which
+    happens often after an edit triggers compile + rerun), fitz.open lands on
+    a zero-byte file and raises "Cannot open empty file". Treat that as
+    transient and retry a handful of times before giving up.
+
+    Truly missing files fail fast (no retry) — those need user attention, not
+    waiting.
+    """
+    import time
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(file_path)
+
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            size = os.path.getsize(file_path)
+        except OSError:
+            size = 0
+
+        if size > 0:
+            try:
+                return fitz.open(file_path)
+            except Exception as e:
+                # Transient parse errors during a partial write also count as retryable.
+                last_exc = e
+        # else: file exists but still 0 bytes — pdflatex hasn't flushed yet
+
+        if attempt < attempts - 1:
+            time.sleep(delay_seconds)
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"PDF {file_path} stayed empty after {attempts} retries")
+
+
 def display_pdf_as_images(
     file_path: str, paper_id: str = None, enable_inline_edit: bool = False
 ):
@@ -190,7 +251,10 @@ def display_pdf_as_images(
         enable_inline_edit: Whether to show inline edit boxes beside each page
     """
     try:
-        doc = fitz.open(file_path)
+        doc = _open_pdf_with_retry(file_path)
+    except FileNotFoundError:
+        st.error(f"Failed to open PDF: {file_path} not found")
+        return None
     except Exception as e:
         st.error(f"Failed to open PDF: {e}")
         return None
@@ -280,7 +344,15 @@ def display_pdf_as_images(
             if edited_notes != current_notes:
                 if st.button("💾 Save Notes", key=f"save_notes_{page_num}"):
                     speaker_notes[page_num] = edited_notes
-                    if save_speaker_notes(speaker_notes, paper_id):
+                    if save_speaker_notes_with_history(
+                        speaker_notes,
+                        paper_id,
+                        description=f"Edited speaker notes (slide {page_num})",
+                    ):
+                        # Pin the active-version indicator to the snapshot we just
+                        # created so the UI's history panel doesn't show "Latest"
+                        # and "Active" diverging.
+                        _pin_active_version(paper_id)
                         st.success("Notes saved!")
                         st.rerun()
                     else:
@@ -804,33 +876,39 @@ def main():
                 st.subheader("Select a Previous Project")
                 st.caption(f"Found {len(existing_projects)} project(s)")
 
-                # Create options for the selectbox with formatted display
-                project_options = {}
-                for project in existing_projects:
+                # Build a project_id -> project mapping. Using project_id as the
+                # selectbox option keeps the persisted value stable across reruns,
+                # even when the project's slides.tex mtime changes (which used to
+                # break selection persistence — a per-rerun display string would
+                # drift, Streamlit couldn't match the stored choice to current
+                # options, and the selectbox silently reset to the placeholder).
+                projects_by_id = {p["id"]: p for p in existing_projects}
+
+                # Sentinel option for "nothing selected".
+                PLACEHOLDER = ""
+                options_list = [PLACEHOLDER] + list(projects_by_id.keys())
+
+                def _format_project_option(pid: str) -> str:
+                    if pid == PLACEHOLDER:
+                        return "-- Select a project --"
+                    project = projects_by_id[pid]
                     status_icon = "✅" if project["has_pdf"] else "📝"
                     status_text = "Ready" if project["has_pdf"] else "Needs compilation"
                     mod_time = datetime.datetime.fromtimestamp(project["modified_time"])
                     time_str = mod_time.strftime("%Y-%m-%d %H:%M")
+                    display_name = project.get("title") or pid
+                    return f"{status_icon} {display_name} ({status_text}, {time_str})"
 
-                    # Use title if available, otherwise fall back to ID
-                    display_name = project.get("title") or project["id"]
-                    display_text = (
-                        f"{status_icon} {display_name} ({status_text}, {time_str})"
-                    )
-                    project_options[display_text] = project
-
-                # Add a placeholder option
-                options_list = ["-- Select a project --"] + list(project_options.keys())
-
-                selected_display = st.selectbox(
+                selected_id = st.selectbox(
                     "Choose a project:",
                     options=options_list,
+                    format_func=_format_project_option,
                     key="project_selector",
                     help="Select a previous project to load and edit. Projects are sorted by modification time (newest first).",
                 )
 
                 # Load/Remove buttons
-                if selected_display != "-- Select a project --":
+                if selected_id != PLACEHOLDER:
                     col1, col2 = st.columns([5, 1])
                     with col1:
                         if st.button(
@@ -838,7 +916,7 @@ def main():
                             key="load_project_btn",
                             use_container_width=True,
                         ):
-                            project = project_options[selected_display]
+                            project = projects_by_id[selected_id]
 
                             # Load the project
                             st.session_state.paper_id = project["id"]
@@ -864,7 +942,7 @@ def main():
                             "🗑️", help="Remove this project", use_container_width=True
                         ):
                             st.write("Confirm deletion?")
-                            project = project_options[selected_display]
+                            project = projects_by_id[selected_id]
                             if st.button(
                                 "Delete",
                                 type="primary",
@@ -1615,6 +1693,23 @@ def main():
                     key="speaker_notes_instruction_input",
                 )
 
+                existing_notes_path = (
+                    f"source/{st.session_state.paper_id}/speaker_notes.json"
+                )
+                has_existing_notes = os.path.exists(existing_notes_path)
+                st.session_state.speaker_notes_refine_existing = st.checkbox(
+                    "♻️ Refine existing speaker notes (if available)",
+                    value=st.session_state.get("speaker_notes_refine_existing", True),
+                    disabled=not has_existing_notes,
+                    help=(
+                        "When checked, the LLM will revise your previously generated notes "
+                        "using the instructions above instead of starting from scratch."
+                        if has_existing_notes
+                        else "No prior speaker notes found yet — generate once, then this option becomes available."
+                    ),
+                    key="speaker_notes_refine_existing_input",
+                )
+
             with col_dl_notes:
                 # Check if speaker notes exist
                 notes_file = f"source/{st.session_state.paper_id}/speaker_notes.json"
@@ -1677,10 +1772,28 @@ def main():
                         instruction=st.session_state.get(
                             "speaker_notes_instruction", ""
                         ),
+                        refine_existing=st.session_state.get(
+                            "speaker_notes_refine_existing", True
+                        ),
                     )
 
                     if speaker_notes:
-                        if save_speaker_notes(speaker_notes, st.session_state.paper_id):
+                        refining = st.session_state.get(
+                            "speaker_notes_refine_existing", True
+                        ) and os.path.exists(
+                            f"source/{st.session_state.paper_id}/speaker_notes.json"
+                        )
+                        snapshot_desc = (
+                            "Refined speaker notes"
+                            if refining
+                            else "Generated speaker notes"
+                        )
+                        if save_speaker_notes_with_history(
+                            speaker_notes,
+                            st.session_state.paper_id,
+                            description=snapshot_desc,
+                        ):
+                            _pin_active_version(st.session_state.paper_id)
                             st.success(
                                 f"✅ Speaker notes generated successfully for {len(speaker_notes)} slides!"
                             )

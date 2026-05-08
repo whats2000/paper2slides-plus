@@ -126,7 +126,13 @@ def _save_compile_history(tex_file_path: Path, output_directory: str) -> None:
 
     Args:
         tex_file_path: Path to the .tex file
-        output_directory: Directory containing the tex file (e.g., "source/2302.11553/")
+        output_directory: Directory containing the tex file (e.g., "source/2302.11553/").
+            This is passed through as the VersionHistory workspace_dir so history
+            files and bundled speaker_notes are read from / written to the SAME
+            workspace as the deck — important for non-default workspace layouts
+            (e.g. the FastAPI per-user paths). Without this, the auto-snapshot
+            would default to ``source/{paper_id}/`` and silently bake
+            ``speaker_notes: null`` into snapshots for any other workspace.
     """
     try:
         # Extract paper_id from output_directory
@@ -146,8 +152,9 @@ def _save_compile_history(tex_file_path: Path, output_directory: str) -> None:
         # Read the tex content
         tex_content = tex_file_path.read_text(encoding="utf-8", errors="ignore")
 
-        # Save to history
-        history = get_history_manager(paper_id)
+        # Save to history — use output_directory as workspace_dir so history
+        # and bundled speaker_notes track this workspace, not the default.
+        history = get_history_manager(paper_id, workspace_dir=output_directory)
         history.save_version(tex_content, "Successful compile")
 
     except Exception as e:
