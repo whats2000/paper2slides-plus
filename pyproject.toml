@@ -22,3 +22,6 @@ dependencies = [
     "python-multipart>=0.0.20",
     "streamlit-ace>=0.1.1",
 ]
+
+[tool.ruff]
+extend-exclude = ["third_party"]
