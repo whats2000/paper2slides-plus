@@ -4,7 +4,11 @@ import logging
 import os
 import re
 from openai import OpenAI
-from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam, ChatCompletion
+from openai.types.chat import (
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+    ChatCompletion,
+)
 
 from prompts import PromptManager
 from .latex_utils import sanitize_frametitles
@@ -27,17 +31,19 @@ def extract_content_from_response(
     return content
 
 
-def resolve_api_credentials(api_key: str | None = None, base_url: str | None = None) -> tuple[str, str | None]:
+def resolve_api_credentials(
+    api_key: str | None = None, base_url: str | None = None
+) -> tuple[str, str | None]:
     """
     Resolve API key and base URL from provided values or environment variables.
-    
+
     Args:
         api_key: Optional API key (will check environment if None)
         base_url: Optional base URL (will check environment if None)
-        
+
     Returns:
         Tuple of (resolved_api_key, resolved_base_url)
-        
+
     Raises:
         RuntimeError: If no API key can be found
     """
@@ -50,31 +56,31 @@ def resolve_api_credentials(api_key: str | None = None, base_url: str | None = N
         raise RuntimeError(
             "No API key provided. Set OPENAI_API_KEY or DASHSCOPE_API_KEY."
         )
-    
+
     # Determine base_url
     resolved_base_url = base_url
     if not resolved_base_url:
         if resolved_api_key == os.environ.get("DASHSCOPE_API_KEY"):
             # DashScope provider
             resolved_base_url = (
-                os.environ.get("DASHSCOPE_BASE_URL") 
+                os.environ.get("DASHSCOPE_BASE_URL")
                 or "https://dashscope.aliyuncs.com/compatible-mode/v1"
             )
         elif os.environ.get("OPENAI_BASE_URL"):
             # Custom OpenAI-compatible provider
             resolved_base_url = os.environ.get("OPENAI_BASE_URL")
-    
+
     return resolved_api_key, resolved_base_url
 
 
 def get_model_name(model_name: str, base_url: str | None) -> str:
     """
     Auto-adjust model name for DashScope if needed.
-    
+
     Args:
         model_name: Requested model name
         base_url: Base URL being used
-        
+
     Returns:
         Adjusted model name
     """
@@ -92,23 +98,25 @@ def get_model_name(model_name: str, base_url: str | None) -> str:
     return model_name
 
 
-def create_llm_client(api_key: str | None = None, base_url: str | None = None) -> OpenAI:
+def create_llm_client(
+    api_key: str | None = None, base_url: str | None = None
+) -> OpenAI:
     """
     Create an OpenAI client with resolved credentials.
-    
+
     Args:
         api_key: Optional API key
         base_url: Optional base URL
-        
+
     Returns:
         Configured OpenAI client
     """
     resolved_api_key, resolved_base_url = resolve_api_credentials(api_key, base_url)
-    
+
     client_kwargs = {"api_key": resolved_api_key}
     if resolved_base_url:
         client_kwargs["base_url"] = resolved_base_url
-    
+
     return OpenAI(**client_kwargs)
 
 
@@ -123,7 +131,7 @@ def call_llm(
 ) -> str | None:
     """
     Call the LLM with system and user messages.
-    
+
     Args:
         system_message: System message for the LLM
         user_prompt: User prompt for the LLM
@@ -132,23 +140,27 @@ def call_llm(
         base_url: Optional base URL
         extract_code: Whether to extract code from markdown blocks (default True)
         code_language: Language to extract if extract_code is True (default "latex")
-        
+
     Returns:
         Extracted content from response (or raw content if extract_code is False), or None on error
     """
     try:
         client = create_llm_client(api_key, base_url)
-        resolved_base_url = client.base_url.host if hasattr(client.base_url, 'host') else str(client.base_url)
+        resolved_base_url = (
+            client.base_url.host
+            if hasattr(client.base_url, "host")
+            else str(client.base_url)
+        )
         model_to_use = get_model_name(model_name, resolved_base_url)
-        
+
         response = client.chat.completions.create(
             model=model_to_use,
             messages=[
-                ChatCompletionSystemMessageParam(content=system_message, role='system'),
-                ChatCompletionUserMessageParam(content=user_prompt, role='user'),
+                ChatCompletionSystemMessageParam(content=system_message, role="system"),
+                ChatCompletionUserMessageParam(content=user_prompt, role="user"),
             ],
         )
-        
+
         if extract_code:
             content = extract_content_from_response(response, code_language)
             if content:
@@ -157,7 +169,7 @@ def call_llm(
         else:
             # Return raw response content without code extraction
             return response.choices[0].message.content
-        
+
     except Exception as e:
         logging.error(f"Error calling LLM: {e}")
         # Provide guidance for DashScope access issues

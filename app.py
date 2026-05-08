@@ -35,27 +35,27 @@ def extract_title_from_latex(latex_file_path: str) -> str:
     """
     Extract the title from a LaTeX file.
     Looks for \title[short]{full} or \title{full} patterns.
-    
+
     Args:
         latex_file_path: Path to the LaTeX file
-        
+
     Returns:
         The extracted title, or the filename if title not found
     """
     try:
-        with open(latex_file_path, 'r', encoding='utf-8') as f:
+        with open(latex_file_path, "r", encoding="utf-8") as f:
             content = f.read()
-        
+
         # Look for \title command
-        title_match = re.search(r'\\title(?:\[[^\]]*\])?\{([^}]+)\}', content)
+        title_match = re.search(r"\\title(?:\[[^\]]*\])?\{([^}]+)\}", content)
         if title_match:
             title = title_match.group(1)
             # Clean up LaTeX commands and extra whitespace
-            title = re.sub(r'\\[a-zA-Z]+\{[^}]*\}', '', title)  # Remove LaTeX commands
-            title = re.sub(r'\\[a-zA-Z]+', '', title)  # Remove simple LaTeX commands
+            title = re.sub(r"\\[a-zA-Z]+\{[^}]*\}", "", title)  # Remove LaTeX commands
+            title = re.sub(r"\\[a-zA-Z]+", "", title)  # Remove simple LaTeX commands
             title = title.strip()
             return title
-        
+
         return None
     except Exception as e:
         logging.warning(f"Failed to extract title from {latex_file_path}: {e}")
@@ -70,17 +70,17 @@ def get_existing_projects():
     source_dir = Path("source")
     if not source_dir.exists():
         return []
-    
+
     projects = []
     for project_dir in source_dir.iterdir():
         if project_dir.is_dir():
             slides_tex = project_dir / "slides.tex"
             slides_pdf = project_dir / "slides.pdf"
-            
+
             if slides_tex.exists():
                 # Extract title from the LaTeX file
                 title = extract_title_from_latex(str(slides_tex))
-                
+
                 project_info = {
                     "id": project_dir.name,
                     "title": title,
@@ -88,16 +88,20 @@ def get_existing_projects():
                     "has_pdf": slides_pdf.exists(),
                     "pdf_path": str(slides_pdf) if slides_pdf.exists() else None,
                     "tex_path": str(slides_tex),
-                    "modified_time": slides_tex.stat().st_mtime if slides_tex.exists() else 0,
+                    "modified_time": slides_tex.stat().st_mtime
+                    if slides_tex.exists()
+                    else 0,
                 }
                 projects.append(project_info)
-    
+
     # Sort by modification time (newest first)
     projects.sort(key=lambda x: x["modified_time"], reverse=True)
     return projects
 
 
-def get_single_page_edit_source(beamer_code: str, frame_number: int) -> tuple[str | None, str, str]:
+def get_single_page_edit_source(
+    beamer_code: str, frame_number: int
+) -> tuple[str | None, str, str]:
     """
     Extract single-page edit source using the same logic as AI single-slide editing.
 
@@ -118,7 +122,9 @@ def get_single_page_edit_source(beamer_code: str, frame_number: int) -> tuple[st
     )
 
 
-def apply_single_page_source_edit(beamer_code: str, frame_number: int, edited_source: str) -> str | None:
+def apply_single_page_source_edit(
+    beamer_code: str, frame_number: int, edited_source: str
+) -> str | None:
     """
     Apply single-page source edits using the same replacement logic as AI single-slide editing.
 
@@ -153,7 +159,7 @@ def get_current_viewer_page(total_frames: int | None = None) -> int:
 def append_chat_message(role: str, content: str, display: bool = True):
     """
     Append a message to the chat history and optionally display it.
-    
+
     Args:
         role: The role of the message sender ("user" or "assistant")
         content: The content of the message
@@ -172,10 +178,12 @@ def display_pdf(file_path):
     st.markdown(pdf_display, unsafe_allow_html=True)
 
 
-def display_pdf_as_images(file_path: str, paper_id: str = None, enable_inline_edit: bool = False):
+def display_pdf_as_images(
+    file_path: str, paper_id: str = None, enable_inline_edit: bool = False
+):
     """
     Display PDF as images with optional inline editing and speaker notes.
-    
+
     Args:
         file_path: Path to the PDF file
         paper_id: Paper ID for editing (required if enable_inline_edit is True)
@@ -189,7 +197,7 @@ def display_pdf_as_images(file_path: str, paper_id: str = None, enable_inline_ed
 
     page_count = doc.page_count
     st.caption(f"Total Pages: {page_count}")
-    
+
     # Load speaker notes if available
     speaker_notes = None
     if paper_id:
@@ -207,65 +215,67 @@ def display_pdf_as_images(file_path: str, paper_id: str = None, enable_inline_ed
         for i in range(page_count):
             page = doc.load_page(i)
             pix = page.get_pixmap(matrix=mat, alpha=False)
-            
+
             if enable_inline_edit:
                 # Create two columns: one for image, one for edit box
                 col_img, col_edit = st.columns([3, 1])
                 with col_img:
-                    st.image(pix.tobytes("png"), width='stretch', caption=f"Page {i+1}")
+                    st.image(
+                        pix.tobytes("png"), width="stretch", caption=f"Page {i + 1}"
+                    )
                 with col_edit:
-                    st.markdown(f"**Edit Page {i+1}**")
+                    st.markdown(f"**Edit Page {i + 1}**")
                     edit_instruction = st.text_area(
                         "Quick edit:",
-                        key=f"edit_page_{i+1}",
+                        key=f"edit_page_{i + 1}",
                         placeholder="Enter edit instruction...",
                         label_visibility="collapsed",
-                        height=100
+                        height=100,
                     )
-                    if st.button("✏️ Edit", key=f"btn_edit_{i+1}", width='stretch'):
+                    if st.button("✏️ Edit", key=f"btn_edit_{i + 1}", width="stretch"):
                         if edit_instruction.strip():
                             # Store edit request in session state
                             st.session_state.pending_edit = {
                                 "frame_number": i + 1,
                                 "instruction": edit_instruction,
-                                "mode": "single"
+                                "mode": "single",
                             }
                             st.rerun()
             else:
-                st.image(pix.tobytes("png"), width='stretch', caption=f"Page {i+1}")
+                st.image(pix.tobytes("png"), width="stretch", caption=f"Page {i + 1}")
     else:
         # Single page display mode - the slider determines which page to edit
         default_page = st.session_state.get("selected_frame_number", 1)
         default_page = min(default_page, page_count)
-        
+
         page_num = st.slider(
-            "Page", 
-            min_value=1, 
-            max_value=page_count, 
+            "Page",
+            min_value=1,
+            max_value=page_count,
             value=default_page,
-            key="pdf_page_slider"
+            key="pdf_page_slider",
         )
-        
+
         # Update selected frame number to match slider
         st.session_state.selected_frame_number = page_num
-        
+
         page = doc.load_page(page_num - 1)
         pix = page.get_pixmap(matrix=mat, alpha=False)
-        st.image(pix.tobytes("png"), width='stretch', caption=f"Page {page_num}")
-        
+        st.image(pix.tobytes("png"), width="stretch", caption=f"Page {page_num}")
+
         # Display speaker notes in single page mode
         if speaker_notes is not None and paper_id:
             current_notes = speaker_notes.get(page_num, "")
-            
+
             edited_notes = st.text_area(
                 f"Speaker notes for slide {page_num}",
                 value=current_notes,
                 height=250,
                 key=f"speaker_notes_{page_num}",
                 placeholder="Speaker notes will appear here after generation. You can also edit them manually.",
-                help="These notes provide supplementary information for the presenter."
+                help="These notes provide supplementary information for the presenter.",
             )
-            
+
             # Save button for edited notes
             if edited_notes != current_notes:
                 if st.button("💾 Save Notes", key=f"save_notes_{page_num}"):
@@ -297,7 +307,16 @@ def get_arxiv_id_from_query(query: str) -> str | None:
     return None
 
 
-def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: str | None = None, start_page: int | None = None, end_page: int | None = None, use_linter: bool = False, latex_zip_path: str | None = None) -> bool:
+def run_generate_step(
+    paper_id: str,
+    api_key: str,
+    model_name: str,
+    pdf_path: str | None = None,
+    start_page: int | None = None,
+    end_page: int | None = None,
+    use_linter: bool = False,
+    latex_zip_path: str | None = None,
+) -> bool:
     """
     Step 1: Generate slides from arXiv paper, local PDF, or LaTeX zip
 
@@ -329,7 +348,9 @@ def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: st
             use_linter=use_linter,
             api_key=api_key,
             model_name=model_name,
-            base_url=st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+            base_url=st.session_state.openai_base_url
+            if st.session_state.openai_base_url
+            else None,
         )
     elif pdf_path:
         success = generate_slides_from_pdf(
@@ -339,7 +360,9 @@ def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: st
             use_pdfcrop=False,
             api_key=api_key,
             model_name=model_name,
-            base_url=st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+            base_url=st.session_state.openai_base_url
+            if st.session_state.openai_base_url
+            else None,
             start_page=start_page,
             end_page=end_page,
         )
@@ -350,7 +373,9 @@ def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: st
             use_pdfcrop=False,
             api_key=api_key,
             model_name=model_name,
-            base_url=st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+            base_url=st.session_state.openai_base_url
+            if st.session_state.openai_base_url
+            else None,
         )
 
     if success:
@@ -361,10 +386,12 @@ def run_generate_step(paper_id: str, api_key: str, model_name: str, pdf_path: st
     return success
 
 
-def run_compile_step(paper_id: str, pdflatex_path: str, save_history: bool = True) -> bool:
+def run_compile_step(
+    paper_id: str, pdflatex_path: str, save_history: bool = True
+) -> bool:
     """
     Step 2: Compile LaTeX slides to PDF (equivalent to cmd_compile)
-    
+
     Args:
         paper_id: Paper ID
         pdflatex_path: Path to pdflatex compiler
@@ -393,7 +420,7 @@ def ensure_initial_history(paper_id: str) -> None:
     """
     Ensure that an initial history version exists for a project.
     If no history exists yet, save the current slides.tex as the initial version.
-    
+
     Args:
         paper_id: The paper ID
     """
@@ -403,7 +430,7 @@ def ensure_initial_history(paper_id: str) -> None:
             # No history exists yet - save initial version
             slides_tex_path = f"source/{paper_id}/slides.tex"
             if os.path.exists(slides_tex_path):
-                with open(slides_tex_path, 'r', encoding='utf-8') as f:
+                with open(slides_tex_path, "r", encoding="utf-8") as f:
                     tex_content = f.read()
                 history.save_version(tex_content, "Initial version (before edits)")
                 logging.info("Saved initial version to history")
@@ -422,7 +449,7 @@ def run_full_pipeline(
 ) -> bool:
     """
     Full pipeline: generate + compile (equivalent to cmd_all, minus opening PDF)
-    
+
     Args:
         paper_id: arXiv ID or generated ID for uploaded PDF
         api_key: API key for LLM
@@ -437,7 +464,9 @@ def run_full_pipeline(
     logging.info("=" * 60)
 
     # Step 1: Generate slides
-    if not run_generate_step(paper_id, api_key, model_name, pdf_path, start_page, end_page, use_linter=True):
+    if not run_generate_step(
+        paper_id, api_key, model_name, pdf_path, start_page, end_page, use_linter=True
+    ):
         logging.error("Pipeline failed at slide generation step")
         return False
 
@@ -475,7 +504,9 @@ def main():
     if "latex_zip_path" not in st.session_state:
         st.session_state.latex_zip_path = None
     if "input_mode" not in st.session_state:
-        st.session_state.input_mode = "arxiv"  # "arxiv", "upload", "latex_zip", or "load"
+        st.session_state.input_mode = (
+            "arxiv"  # "arxiv", "upload", "latex_zip", or "load"
+        )
     if "pdf_path" not in st.session_state:
         st.session_state.pdf_path = None
     if "pipeline_status" not in st.session_state:
@@ -485,7 +516,6 @@ def main():
     if "pdflatex_path" not in st.session_state:
         st.session_state.pdflatex_path = "pdflatex"
     if "openai_api_key" not in st.session_state:
-
         load_dotenv(override=True)
         st.session_state.openai_api_key = os.getenv("OPENAI_API_KEY", "")
     if "model_name" not in st.session_state:
@@ -502,7 +532,7 @@ def main():
 
     if "run_full_pipeline" not in st.session_state:
         st.session_state.run_full_pipeline = False
-    
+
     # Single-slide editing mode
     if "edit_mode" not in st.session_state:
         st.session_state.edit_mode = "single"  # "single" or "full"
@@ -513,7 +543,7 @@ def main():
     if "pending_edit" not in st.session_state:
         st.session_state.pending_edit = None
         st.session_state.total_frames = 0
-    
+
     # Page range for PDF processing
     if "pdf_start_page" not in st.session_state:
         st.session_state.pdf_start_page = None
@@ -534,25 +564,36 @@ def main():
     # Sidebar for paper search and settings
     with st.sidebar:
         st.header("Paper Input")
-        
+
         # Input mode selection
         input_mode = st.radio(
             "Choose input method:",
-            options=["arXiv Paper", "Upload PDF", "Upload LaTeX ZIP", "Load Previous Project"],
+            options=[
+                "arXiv Paper",
+                "Upload PDF",
+                "Upload LaTeX ZIP",
+                "Load Previous Project",
+            ],
             index=(
-                0 if st.session_state.input_mode == "arxiv" else
-                1 if st.session_state.input_mode == "upload" else
-                2 if st.session_state.input_mode == "latex_zip" else
-                3
+                0
+                if st.session_state.input_mode == "arxiv"
+                else 1
+                if st.session_state.input_mode == "upload"
+                else 2
+                if st.session_state.input_mode == "latex_zip"
+                else 3
             ),
-            key="input_mode_radio"
+            key="input_mode_radio",
         )
-        
+
         new_mode = (
-            "arxiv" if input_mode == "arXiv Paper" else
-            "upload" if input_mode == "Upload PDF" else
-            "latex_zip" if input_mode == "Upload LaTeX ZIP" else
-            "load"
+            "arxiv"
+            if input_mode == "arXiv Paper"
+            else "upload"
+            if input_mode == "Upload PDF"
+            else "latex_zip"
+            if input_mode == "Upload LaTeX ZIP"
+            else "load"
         )
         if new_mode != st.session_state.input_mode:
             # Clear source paths that belong to the previous mode
@@ -564,11 +605,11 @@ def main():
             st.session_state.pipeline_status = "ready"
             st.session_state.messages = []
             st.session_state.input_mode = new_mode
-        
+
         if st.session_state.input_mode == "arxiv":
             # arXiv search
             query = st.text_input("Enter arXiv ID or search query:", key="query_input")
-            
+
             if st.button("Search Papers", key="search_button"):
                 st.session_state.arxiv_id = None
                 st.session_state.paper_id = None
@@ -588,7 +629,9 @@ def main():
                         st.session_state.arxiv_id = result.get_short_id()
                         st.session_state.paper_id = result.get_short_id()
                         st.session_state.paper_title = result.title
-                        st.session_state.paper_authors = [a.name for a in result.authors]
+                        st.session_state.paper_authors = [
+                            a.name for a in result.authors
+                        ]
                     else:
                         st.warning("Invalid arXiv ID or paper not found.")
                 else:
@@ -609,31 +652,38 @@ def main():
                         st.session_state.arxiv_id = result.get_short_id()
                         st.session_state.paper_id = result.get_short_id()
                         st.session_state.paper_title = result.title
-                        st.session_state.paper_authors = [a.name for a in result.authors]
+                        st.session_state.paper_authors = [
+                            a.name for a in result.authors
+                        ]
                         del st.session_state.search_results
                         st.rerun()
-            
+
             # Show selected paper info
-            if st.session_state.arxiv_id and 'paper_title' in st.session_state:
-                st.success(f"Selected: **{st.session_state.paper_title}** by {st.session_state.paper_authors[0]} et al.")
-        
+            if st.session_state.arxiv_id and "paper_title" in st.session_state:
+                st.success(
+                    f"Selected: **{st.session_state.paper_title}** by {st.session_state.paper_authors[0]} et al."
+                )
+
         elif st.session_state.input_mode == "upload":
             # PDF upload
             uploaded_file = st.file_uploader(
-                "Upload a PDF file",
-                type=["pdf"],
-                key="pdf_uploader"
+                "Upload a PDF file", type=["pdf"], key="pdf_uploader"
             )
-            
-            if uploaded_file is not None and ("uploaded_file_name" not in st.session_state or st.session_state.uploaded_file_name != uploaded_file.name):
+
+            if uploaded_file is not None and (
+                "uploaded_file_name" not in st.session_state
+                or st.session_state.uploaded_file_name != uploaded_file.name
+            ):
                 # Save uploaded file to a temporary location
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=".pdf"
+                ) as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_path = tmp_file.name
-                
+
                 # Generate a unique ID for this PDF
                 paper_id = generate_pdf_id(tmp_path)
-                
+
                 # Update session state
                 st.session_state.uploaded_pdf_path = tmp_path
                 st.session_state.paper_id = paper_id
@@ -642,14 +692,16 @@ def main():
                 st.session_state.messages = []
                 st.session_state.pipeline_status = "ready"
                 st.session_state.uploaded_file_name = uploaded_file.name
-                
+
                 st.success(f"PDF uploaded successfully! ID: {paper_id}")
-            
+
             # Page range selection (only show if a PDF is uploaded)
             if uploaded_file is not None:
                 st.subheader("📖 Page Range (Optional)")
-                st.caption("Specify a page range for processing long documents (e.g., a specific chapter). Leave empty to process the entire PDF.")
-                
+                st.caption(
+                    "Specify a page range for processing long documents (e.g., a specific chapter). Leave empty to process the entire PDF."
+                )
+
                 # Get total pages from the PDF
                 if st.session_state.uploaded_pdf_path:
                     try:
@@ -657,7 +709,7 @@ def main():
                         total_pages = len(doc)
                         doc.close()
                         st.info(f"Total pages in PDF: {total_pages}")
-                        
+
                         col1, col2 = st.columns(2)
                         with col1:
                             start_page = st.number_input(
@@ -667,7 +719,7 @@ def main():
                                 value=None,
                                 placeholder="1",
                                 help="First page to process (1-indexed). Leave empty to start from page 1.",
-                                key="start_page_input"
+                                key="start_page_input",
                             )
                         with col2:
                             end_page = st.number_input(
@@ -677,20 +729,28 @@ def main():
                                 value=None,
                                 placeholder=f"{total_pages}",
                                 help="Last page to process (1-indexed, inclusive). Leave empty to process until the last page.",
-                                key="end_page_input"
+                                key="end_page_input",
                             )
-                        
+
                         # Validate page range
-                        if start_page is not None and end_page is not None and start_page > end_page:
-                            st.error("⚠️ Start page must be less than or equal to end page.")
+                        if (
+                            start_page is not None
+                            and end_page is not None
+                            and start_page > end_page
+                        ):
+                            st.error(
+                                "⚠️ Start page must be less than or equal to end page."
+                            )
                         else:
                             st.session_state.pdf_start_page = start_page
                             st.session_state.pdf_end_page = end_page
                             if start_page or end_page:
-                                st.success(f"✓ Will process pages {start_page or 1} to {end_page or total_pages}")
+                                st.success(
+                                    f"✓ Will process pages {start_page or 1} to {end_page or total_pages}"
+                                )
                     except Exception as e:
                         st.error(f"Failed to read PDF: {e}")
-        
+
         elif st.session_state.input_mode == "latex_zip":
             # LaTeX project ZIP upload — same pipeline as arXiv, just from a local source
             uploaded_zip = st.file_uploader(
@@ -704,12 +764,15 @@ def main():
                 "uploaded_zip_name" not in st.session_state
                 or st.session_state.uploaded_zip_name != uploaded_zip.name
             ):
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=".zip"
+                ) as tmp_file:
                     tmp_file.write(uploaded_zip.getvalue())
                     tmp_zip_path = tmp_file.name
 
                 # Derive a stable paper_id from the zip's content hash
                 import hashlib
+
                 zip_hash = hashlib.sha256(uploaded_zip.getvalue()).hexdigest()[:12]
                 paper_id = f"zip_{zip_hash}"
 
@@ -725,18 +788,22 @@ def main():
                 st.success(f"ZIP uploaded! ID: {paper_id}")
 
             if st.session_state.latex_zip_path:
-                st.info(f"📦 {st.session_state.get('uploaded_zip_name', 'zip file')} ready")
+                st.info(
+                    f"📦 {st.session_state.get('uploaded_zip_name', 'zip file')} ready"
+                )
 
         else:
             # Load previous project
             existing_projects = get_existing_projects()
-            
+
             if not existing_projects:
-                st.info("No previous projects found. Generate slides from an arXiv paper or uploaded PDF first.")
+                st.info(
+                    "No previous projects found. Generate slides from an arXiv paper or uploaded PDF first."
+                )
             else:
                 st.subheader("Select a Previous Project")
                 st.caption(f"Found {len(existing_projects)} project(s)")
-                
+
                 # Create options for the selectbox with formatted display
                 project_options = {}
                 for project in existing_projects:
@@ -744,53 +811,66 @@ def main():
                     status_text = "Ready" if project["has_pdf"] else "Needs compilation"
                     mod_time = datetime.datetime.fromtimestamp(project["modified_time"])
                     time_str = mod_time.strftime("%Y-%m-%d %H:%M")
-                    
+
                     # Use title if available, otherwise fall back to ID
                     display_name = project.get("title") or project["id"]
-                    display_text = f"{status_icon} {display_name} ({status_text}, {time_str})"
+                    display_text = (
+                        f"{status_icon} {display_name} ({status_text}, {time_str})"
+                    )
                     project_options[display_text] = project
-                
+
                 # Add a placeholder option
                 options_list = ["-- Select a project --"] + list(project_options.keys())
-                
+
                 selected_display = st.selectbox(
                     "Choose a project:",
                     options=options_list,
                     key="project_selector",
-                    help="Select a previous project to load and edit. Projects are sorted by modification time (newest first)."
+                    help="Select a previous project to load and edit. Projects are sorted by modification time (newest first).",
                 )
-                
+
                 # Load/Remove buttons
                 if selected_display != "-- Select a project --":
                     col1, col2 = st.columns([5, 1])
                     with col1:
-                        if st.button("📂 Load Selected Project", key="load_project_btn", use_container_width=True):
+                        if st.button(
+                            "📂 Load Selected Project",
+                            key="load_project_btn",
+                            use_container_width=True,
+                        ):
                             project = project_options[selected_display]
-                            
+
                             # Load the project
                             st.session_state.paper_id = project["id"]
                             st.session_state.arxiv_id = None
                             st.session_state.uploaded_pdf_path = None
                             st.session_state.messages = []
-                            
+
                             if project["has_pdf"]:
                                 # Project is ready for editing
                                 st.session_state.pipeline_status = "completed"
                                 st.session_state.pdf_path = project["pdf_path"]
-                                
+
                                 # Ensure initial history exists when loading project
                                 ensure_initial_history(project["id"])
                             else:
                                 # Project needs compilation
                                 st.session_state.pipeline_status = "ready"
                                 st.session_state.pdf_path = None
-                            
+
                             st.rerun()
                     with col2:
-                        with st.popover("🗑️", help="Remove this project", use_container_width=True):
+                        with st.popover(
+                            "🗑️", help="Remove this project", use_container_width=True
+                        ):
                             st.write("Confirm deletion?")
                             project = project_options[selected_display]
-                            if st.button("Delete", type="primary", key=f"confirm_remove_{project['id']}", use_container_width=True):
+                            if st.button(
+                                "Delete",
+                                type="primary",
+                                key=f"confirm_remove_{project['id']}",
+                                use_container_width=True,
+                            ):
                                 project_dir = os.path.join("source", project["id"])
                                 if os.path.exists(project_dir):
                                     shutil.rmtree(project_dir)
@@ -809,13 +889,11 @@ def main():
             "Model Name (e.g., gpt-4.1-2025-04-14 or qwen-plus)",
             value=st.session_state.model_name,
         )
-        st.caption(
-            "Default model from .env (DEFAULT_MODEL). Can be overridden here."
-        )
+        st.caption("Default model from .env (DEFAULT_MODEL). Can be overridden here.")
         st.session_state.openai_base_url = st.text_input(
             "Base URL (e.g., https://api.openai.com/v1)",
             value=st.session_state.openai_base_url,
-            placeholder="https://api.openai.com/v1"
+            placeholder="https://api.openai.com/v1",
         )
         st.caption(
             "Default base URL from .env (OPENAI_BASE_URL). Leave empty to use .env value, or default OpenAI API if not set."
@@ -844,7 +922,7 @@ def main():
                 "completed",
                 "failed",
             ]
-            
+
             # Disable generation buttons if in "load" mode (project already exists)
             is_loaded_project = st.session_state.input_mode == "load"
 
@@ -852,7 +930,9 @@ def main():
                 "🚀 Run Full Pipeline",
                 key="run_full",
                 disabled=not can_run or is_loaded_project,
-                help="Generate slides + Compile PDF (equivalent to 'python paper2slides.py all <arxiv_id>')" if not is_loaded_project else "Disabled: Project already exists. Use 'Compile Only' if needed.",
+                help="Generate slides + Compile PDF (equivalent to 'python paper2slides.py all <arxiv_id>')"
+                if not is_loaded_project
+                else "Disabled: Project already exists. Use 'Compile Only' if needed.",
             ):
                 st.session_state.pipeline_status = "generating"
                 st.session_state.pdf_path = None
@@ -865,7 +945,9 @@ def main():
                     "📝 Generate Only",
                     key="run_generate",
                     disabled=not can_run or is_loaded_project,
-                    help="Generate slides only (equivalent to 'python paper2slides.py generate <arxiv_id>')" if not is_loaded_project else "Disabled: Project already exists.",
+                    help="Generate slides only (equivalent to 'python paper2slides.py generate <arxiv_id>')"
+                    if not is_loaded_project
+                    else "Disabled: Project already exists.",
                 ):
                     st.session_state.pipeline_status = "generating"
                     st.session_state.pdf_path = None
@@ -900,31 +982,39 @@ def main():
         ):
             # Ensure initial history exists before showing editing UI
             ensure_initial_history(st.session_state.paper_id)
-            
+
             # Version History Section
             history = get_history_manager(st.session_state.paper_id)
             versions = history.list_versions()
-            
+
             if versions:
-                with st.expander(f"📜 Version History ({len(versions)} saved versions)", expanded=False):
-                    st.caption("Versions are automatically saved after each successful compile. Click any version to restore it.")
-                    
+                with st.expander(
+                    f"📜 Version History ({len(versions)} saved versions)",
+                    expanded=False,
+                ):
+                    st.caption(
+                        "Versions are automatically saved after each successful compile. Click any version to restore it."
+                    )
+
                     # Track which version is currently loaded (default to latest if not set)
                     current_version_key = f"current_version_{st.session_state.paper_id}"
                     if current_version_key not in st.session_state and versions:
-                        st.session_state[current_version_key] = versions[0]['filename']
-                    
+                        st.session_state[current_version_key] = versions[0]["filename"]
+
                     for idx, version in enumerate(versions):
                         # Parse timestamp for display
                         try:
-                            ts = datetime.datetime.fromisoformat(version['timestamp'])
+                            ts = datetime.datetime.fromisoformat(version["timestamp"])
                             time_str = ts.strftime("%Y-%m-%d %H:%M:%S")
                         except:
-                            time_str = version['timestamp']
-                        
+                            time_str = version["timestamp"]
+
                         # Check if this is the currently loaded version
-                        is_current = st.session_state.get(current_version_key) == version['filename']
-                        
+                        is_current = (
+                            st.session_state.get(current_version_key)
+                            == version["filename"]
+                        )
+
                         col_info, col_btn = st.columns([3, 1])
                         with col_info:
                             if is_current:
@@ -933,30 +1023,38 @@ def main():
                                 st.markdown(f"**Latest:** {time_str}")
                             else:
                                 st.markdown(f"**{idx + 1}.** {time_str}")
-                            st.caption(version['description'])
-                        
+                            st.caption(version["description"])
+
                         with col_btn:
                             # Show restore button for all versions except the current one
                             if not is_current:
-                                if st.button("Restore", key=f"restore_{version['filename']}"):
-                                    slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
-                                    if history.restore_version(version['filename'], slides_tex_path):
+                                if st.button(
+                                    "Restore", key=f"restore_{version['filename']}"
+                                ):
+                                    slides_tex_path = (
+                                        f"source/{st.session_state.paper_id}/slides.tex"
+                                    )
+                                    if history.restore_version(
+                                        version["filename"], slides_tex_path
+                                    ):
                                         # Update the current version tracker
-                                        st.session_state[current_version_key] = version['filename']
-                                        
+                                        st.session_state[current_version_key] = version[
+                                            "filename"
+                                        ]
+
                                         st.success("✅ Restored! Recompiling...")
                                         # Recompile after restore WITHOUT saving to history (to avoid duplicate)
                                         if run_compile_step(
                                             st.session_state.paper_id,
                                             st.session_state.pdflatex_path,
-                                            save_history=False  # Don't save history when restoring
+                                            save_history=False,  # Don't save history when restoring
                                         ):
-                                            st.session_state.pdf_path = (
-                                                f"source/{st.session_state.paper_id}/slides.pdf"
-                                            )
+                                            st.session_state.pdf_path = f"source/{st.session_state.paper_id}/slides.pdf"
                                             st.rerun()
                                         else:
-                                            st.error("Failed to recompile after restore.")
+                                            st.error(
+                                                "Failed to recompile after restore."
+                                            )
                                     else:
                                         st.error("Failed to restore version.")
                             else:
@@ -964,78 +1062,110 @@ def main():
 
                             # Delete (two-step confirm) - but protect initial version and current version
                             # The initial version is always the last in the list (oldest)
-                            is_initial = (idx == len(versions) - 1) and version['description'].startswith("Initial version")
-                            
+                            is_initial = (idx == len(versions) - 1) and version[
+                                "description"
+                            ].startswith("Initial version")
+
                             if not is_initial and not is_current:
                                 delete_key = f"delete_pending_{version['filename']}"
                                 if st.session_state.get(delete_key):
                                     st.write("⚠️ Confirm delete?")
-                                    if st.button("Confirm", key=f"confirm_delete_{version['filename']}", width='stretch'):
-                                        if history.delete_version(version['filename']):
+                                    if st.button(
+                                        "Confirm",
+                                        key=f"confirm_delete_{version['filename']}",
+                                        width="stretch",
+                                    ):
+                                        if history.delete_version(version["filename"]):
                                             st.success("Deleted.")
                                         else:
                                             st.error("Failed to delete.")
                                         # Clear the pending flag and refresh
                                         st.session_state[delete_key] = False
                                         st.rerun()
-                                    if st.button("Cancel", key=f"cancel_delete_{version['filename']}", width='stretch'):
+                                    if st.button(
+                                        "Cancel",
+                                        key=f"cancel_delete_{version['filename']}",
+                                        width="stretch",
+                                    ):
                                         st.session_state[delete_key] = False
                                         st.rerun()
                                 else:
-                                    if st.button("Delete", key=f"delete_{version['filename']}", width='stretch'):
+                                    if st.button(
+                                        "Delete",
+                                        key=f"delete_{version['filename']}",
+                                        width="stretch",
+                                    ):
                                         st.session_state[delete_key] = True
                             elif is_initial:
                                 # Initial version - show a lock icon
                                 st.caption("🔒")
-                        
+
                         if idx < len(versions) - 1:
                             st.divider()
 
                     # Clear-all history control (two-step confirm)
                     st.divider()
                     clear_key = f"clear_history_pending_{st.session_state.paper_id}"
-                    if st.button("Clear all saved versions", key=f"clear_all_{st.session_state.paper_id}"):
+                    if st.button(
+                        "Clear all saved versions",
+                        key=f"clear_all_{st.session_state.paper_id}",
+                    ):
                         st.session_state[clear_key] = True
 
                     if st.session_state.get(clear_key):
-                        st.warning("⚠️ This will permanently delete all saved working versions for this project. The initial version and currently active version will be preserved.")
-                        if st.button("Confirm clear all", key=f"confirm_clear_{st.session_state.paper_id}"):
+                        st.warning(
+                            "⚠️ This will permanently delete all saved working versions for this project. The initial version and currently active version will be preserved."
+                        )
+                        if st.button(
+                            "Confirm clear all",
+                            key=f"confirm_clear_{st.session_state.paper_id}",
+                        ):
                             # Get current version to preserve
-                            current_version_key = f"current_version_{st.session_state.paper_id}"
+                            current_version_key = (
+                                f"current_version_{st.session_state.paper_id}"
+                            )
                             current_version = st.session_state.get(current_version_key)
-                            
+
                             if history.clear_history(preserve_current=current_version):
-                                st.success("All saved working versions deleted. Initial and current versions preserved.")
+                                st.success(
+                                    "All saved working versions deleted. Initial and current versions preserved."
+                                )
                             else:
                                 st.error("Failed to clear history.")
                             st.session_state[clear_key] = False
                             st.rerun()
-                        if st.button("Cancel", key=f"cancel_clear_{st.session_state.paper_id}"):
+                        if st.button(
+                            "Cancel", key=f"cancel_clear_{st.session_state.paper_id}"
+                        ):
                             st.session_state[clear_key] = False
                             st.rerun()
-            
+
             st.divider()
-            
+
             # Read slides to get total frame count
             slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
-            with open(slides_tex_path, "r", encoding='utf8') as f:
+            with open(slides_tex_path, "r", encoding="utf8") as f:
                 beamer_code = f.read()
-            
+
             frames = extract_frames_from_beamer(beamer_code)
             st.session_state.total_frames = len(frames)
-            
+
             # Edit mode selection
             st.subheader("Edit Mode")
             edit_mode = st.radio(
                 "Choose editing scope:",
                 options=["Edit Current Page", "Edit All Slides"],
-                index=0 if st.session_state.get("edit_mode", "single") == "single" else 1,
+                index=0
+                if st.session_state.get("edit_mode", "single") == "single"
+                else 1,
                 key="edit_mode_radio",
                 horizontal=True,
-                help="Single page mode: edits only the page shown in slider. All slides: edits entire presentation."
+                help="Single page mode: edits only the page shown in slider. All slides: edits entire presentation.",
             )
-            st.session_state.edit_mode = "single" if edit_mode == "Edit Current Page" else "full"
-            
+            st.session_state.edit_mode = (
+                "single" if edit_mode == "Edit Current Page" else "full"
+            )
+
             # Paper context toggle (near editing mode for better UX)
             if "use_paper_context" not in st.session_state:
                 st.session_state.use_paper_context = True
@@ -1043,31 +1173,45 @@ def main():
                 "📝 Use original paper context when editing",
                 value=st.session_state.use_paper_context,
                 help="When enabled, the LLM will have access to the original paper source during editing, which helps maintain accuracy and consistency with the paper's content and notation. Disable to reduce token usage.",
-                key="use_paper_context_toggle"
+                key="use_paper_context_toggle",
             )
-            
+
             # Show info based on mode
             if st.session_state.edit_mode == "single":
                 current_page = get_current_viewer_page(st.session_state.total_frames)
-                st.info(f"🎯 Editing will only affect slide {current_page} (current page in viewer)")
+                st.info(
+                    f"🎯 Editing will only affect slide {current_page} (current page in viewer)"
+                )
             else:
                 st.info("📄 Editing will affect all slides in the presentation")
 
             with st.expander("✏️ Edit Source (manual)", expanded=False):
-                st.caption("Directly edit LaTeX source. Changes are saved to slides.tex and compiled.")
+                st.caption(
+                    "Directly edit LaTeX source. Changes are saved to slides.tex and compiled."
+                )
 
                 current_page = get_current_viewer_page(st.session_state.total_frames)
-                file_mtime = int(os.path.getmtime(slides_tex_path)) if os.path.exists(slides_tex_path) else 0
+                file_mtime = (
+                    int(os.path.getmtime(slides_tex_path))
+                    if os.path.exists(slides_tex_path)
+                    else 0
+                )
 
                 if st.session_state.edit_mode == "full":
                     editor_value = beamer_code
                     editor_label = "Full slides.tex"
-                    editor_help = "Manual edits apply to the entire presentation source."
-                    editor_key = f"manual_source_full_{st.session_state.paper_id}_{file_mtime}"
+                    editor_help = (
+                        "Manual edits apply to the entire presentation source."
+                    )
+                    editor_key = (
+                        f"manual_source_full_{st.session_state.paper_id}_{file_mtime}"
+                    )
                 else:
-                    source_content, editor_label, editor_help = get_single_page_edit_source(
-                        beamer_code,
-                        current_page,
+                    source_content, editor_label, editor_help = (
+                        get_single_page_edit_source(
+                            beamer_code,
+                            current_page,
+                        )
                     )
                     if not source_content:
                         if current_page == 1:
@@ -1105,31 +1249,49 @@ def main():
                                 st.session_state.paper_id,
                                 st.session_state.pdflatex_path,
                             ):
-                                history_mgr = get_history_manager(st.session_state.paper_id)
+                                history_mgr = get_history_manager(
+                                    st.session_state.paper_id
+                                )
                                 latest_versions = history_mgr.list_versions()
                                 if latest_versions:
-                                    current_version_key = f"current_version_{st.session_state.paper_id}"
-                                    st.session_state[current_version_key] = latest_versions[0]["filename"]
+                                    current_version_key = (
+                                        f"current_version_{st.session_state.paper_id}"
+                                    )
+                                    st.session_state[current_version_key] = (
+                                        latest_versions[0]["filename"]
+                                    )
 
-                                st.success("✅ Source updated and PDF recompiled successfully!")
+                                st.success(
+                                    "✅ Source updated and PDF recompiled successfully!"
+                                )
                                 st.session_state.pdf_path = (
                                     f"source/{st.session_state.paper_id}/slides.pdf"
                                 )
                                 st.rerun()
                             else:
-                                st.error("Failed to recompile PDF after saving source edits.")
+                                st.error(
+                                    "Failed to recompile PDF after saving source edits."
+                                )
                     else:
-                        current_source, _, _ = get_single_page_edit_source(beamer_code, current_page)
+                        current_source, _, _ = get_single_page_edit_source(
+                            beamer_code, current_page
+                        )
                         if not current_source:
                             if current_page == 1:
                                 st.error("Could not find preamble source for slide 1.")
                             else:
-                                st.error(f"Could not find source for slide {current_page}.")
+                                st.error(
+                                    f"Could not find source for slide {current_page}."
+                                )
                         elif edited_source == current_source:
                             if current_page == 1:
-                                st.info("No changes detected for slide 1 preamble source.")
+                                st.info(
+                                    "No changes detected for slide 1 preamble source."
+                                )
                             else:
-                                st.info(f"No changes detected for slide {current_page} source.")
+                                st.info(
+                                    f"No changes detected for slide {current_page} source."
+                                )
                         else:
                             updated_beamer_code = apply_single_page_source_edit(
                                 beamer_code,
@@ -1138,38 +1300,56 @@ def main():
                             )
                             if not updated_beamer_code:
                                 if current_page == 1:
-                                    st.error("Failed to apply source update to slide 1 preamble.")
+                                    st.error(
+                                        "Failed to apply source update to slide 1 preamble."
+                                    )
                                 else:
-                                    st.error(f"Failed to apply source update to slide {current_page}.")
+                                    st.error(
+                                        f"Failed to apply source update to slide {current_page}."
+                                    )
                             else:
                                 with open(slides_tex_path, "w", encoding="utf-8") as f:
                                     f.write(updated_beamer_code)
 
                                 if current_page == 1:
-                                    st.info("Saved slide 1 preamble source changes. Recompiling PDF...")
+                                    st.info(
+                                        "Saved slide 1 preamble source changes. Recompiling PDF..."
+                                    )
                                 else:
-                                    st.info(f"Saved slide {current_page} source changes. Recompiling PDF...")
+                                    st.info(
+                                        f"Saved slide {current_page} source changes. Recompiling PDF..."
+                                    )
 
                                 if run_compile_step(
                                     st.session_state.paper_id,
                                     st.session_state.pdflatex_path,
                                 ):
-                                    history_mgr = get_history_manager(st.session_state.paper_id)
+                                    history_mgr = get_history_manager(
+                                        st.session_state.paper_id
+                                    )
                                     latest_versions = history_mgr.list_versions()
                                     if latest_versions:
                                         current_version_key = f"current_version_{st.session_state.paper_id}"
-                                        st.session_state[current_version_key] = latest_versions[0]["filename"]
+                                        st.session_state[current_version_key] = (
+                                            latest_versions[0]["filename"]
+                                        )
 
                                     if current_page == 1:
-                                        st.success("✅ Slide 1 preamble source updated and PDF recompiled successfully!")
+                                        st.success(
+                                            "✅ Slide 1 preamble source updated and PDF recompiled successfully!"
+                                        )
                                     else:
-                                        st.success(f"✅ Slide {current_page} source updated and PDF recompiled successfully!")
+                                        st.success(
+                                            f"✅ Slide {current_page} source updated and PDF recompiled successfully!"
+                                        )
                                     st.session_state.pdf_path = (
                                         f"source/{st.session_state.paper_id}/slides.pdf"
                                     )
                                     st.rerun()
                                 else:
-                                    st.error("Failed to recompile PDF after saving source edits.")
+                                    st.error(
+                                        "Failed to recompile PDF after saving source edits."
+                                    )
 
             st.divider()
 
@@ -1183,7 +1363,7 @@ def main():
                     key="clear_chat_history",
                     help="Clear chat history (UI only, does not affect slides)",
                     disabled=not st.session_state.messages,
-                    width='stretch',
+                    width="stretch",
                 ):
                     st.session_state.messages = []
                     st.rerun()
@@ -1197,7 +1377,7 @@ def main():
             if prompt := st.chat_input("Your instructions to edit the slides..."):
                 # Determine which frame to edit
                 current_frame = get_current_viewer_page(st.session_state.total_frames)
-                
+
                 # Add message with appropriate prefix
                 if st.session_state.edit_mode == "single":
                     append_chat_message("user", f"[Page {current_frame}] {prompt}")
@@ -1215,58 +1395,80 @@ def main():
                         "already_logged": True,
                     }
                 st.rerun()
-            
+
             # Handle pending edit from inline edit boxes (full page view)
             if st.session_state.get("pending_edit"):
                 edit_info = st.session_state.pending_edit
                 st.session_state.pending_edit = None  # Clear it
-                
+
                 # Append to chat history
                 if not edit_info.get("already_logged", False):
                     if edit_info.get("mode") == "full":
-                        append_chat_message("user", f"[All Slides] {edit_info['instruction']}", display=False)
+                        append_chat_message(
+                            "user",
+                            f"[All Slides] {edit_info['instruction']}",
+                            display=False,
+                        )
                     else:
-                        append_chat_message("user", f"[Page {edit_info['frame_number']}] {edit_info['instruction']}", display=False)
-                
-                spinner_label = "Editing all slides..." if edit_info.get("mode") == "full" else f"Editing slide {edit_info['frame_number']}..."
+                        append_chat_message(
+                            "user",
+                            f"[Page {edit_info['frame_number']}] {edit_info['instruction']}",
+                            display=False,
+                        )
+
+                spinner_label = (
+                    "Editing all slides..."
+                    if edit_info.get("mode") == "full"
+                    else f"Editing slide {edit_info['frame_number']}..."
+                )
 
                 with st.spinner(spinner_label):
                     slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
-                    with open(slides_tex_path, "r", encoding='utf-8') as f:
+                    with open(slides_tex_path, "r", encoding="utf-8") as f:
                         beamer_code = f.read()
 
                     if edit_info.get("mode") == "full":
                         new_beamer_code = edit_slides(
                             beamer_code,
-                            edit_info['instruction'],
+                            edit_info["instruction"],
                             st.session_state.openai_api_key,
                             st.session_state.model_name,
-                            st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+                            st.session_state.openai_base_url
+                            if st.session_state.openai_base_url
+                            else None,
                             paper_id=st.session_state.paper_id,
                             use_paper_context=st.session_state.use_paper_context,
                         )
                         success_message = "✅ Edited all slides successfully!"
-                        failed_recompile_message = "❌ Failed to recompile PDF after editing all slides."
+                        failed_recompile_message = (
+                            "❌ Failed to recompile PDF after editing all slides."
+                        )
                         failed_edit_message = "❌ Failed to edit all slides."
                     else:
                         new_beamer_code = edit_single_slide(
                             beamer_code,
-                            edit_info['frame_number'],
-                            edit_info['instruction'],
+                            edit_info["frame_number"],
+                            edit_info["instruction"],
                             st.session_state.openai_api_key,
                             st.session_state.model_name,
-                            st.session_state.openai_base_url if st.session_state.openai_base_url else None,
+                            st.session_state.openai_base_url
+                            if st.session_state.openai_base_url
+                            else None,
                             paper_id=st.session_state.paper_id,
                             use_paper_context=st.session_state.use_paper_context,
                         )
-                        success_message = f"✅ Edited slide {edit_info['frame_number']} successfully!"
+                        success_message = (
+                            f"✅ Edited slide {edit_info['frame_number']} successfully!"
+                        )
                         failed_recompile_message = f"❌ Failed to recompile PDF after editing slide {edit_info['frame_number']}."
-                        failed_edit_message = f"❌ Failed to edit slide {edit_info['frame_number']}."
-                    
+                        failed_edit_message = (
+                            f"❌ Failed to edit slide {edit_info['frame_number']}."
+                        )
+
                     if new_beamer_code:
-                        with open(slides_tex_path, "w", encoding='utf-8') as f:
+                        with open(slides_tex_path, "w", encoding="utf-8") as f:
                             f.write(new_beamer_code)
-                        
+
                         if run_compile_step(
                             st.session_state.paper_id,
                             st.session_state.pdflatex_path,
@@ -1275,22 +1477,32 @@ def main():
                             history_mgr = get_history_manager(st.session_state.paper_id)
                             latest_versions = history_mgr.list_versions()
                             if latest_versions:
-                                current_version_key = f"current_version_{st.session_state.paper_id}"
-                                st.session_state[current_version_key] = latest_versions[0]['filename']
-                            
+                                current_version_key = (
+                                    f"current_version_{st.session_state.paper_id}"
+                                )
+                                st.session_state[current_version_key] = latest_versions[
+                                    0
+                                ]["filename"]
+
                             # Append assistant response to chat history
-                            append_chat_message("assistant", success_message, display=False)
-                            
+                            append_chat_message(
+                                "assistant", success_message, display=False
+                            )
+
                             st.success(success_message)
                             st.session_state.pdf_path = (
                                 f"source/{st.session_state.paper_id}/slides.pdf"
                             )
                             st.rerun()
                         else:
-                            append_chat_message("assistant", failed_recompile_message, display=False)
+                            append_chat_message(
+                                "assistant", failed_recompile_message, display=False
+                            )
                             st.error("Failed to recompile PDF.")
                     else:
-                        append_chat_message("assistant", failed_edit_message, display=False)
+                        append_chat_message(
+                            "assistant", failed_edit_message, display=False
+                        )
                         st.error("Failed to edit slide.")
         else:
             st.info(
@@ -1311,10 +1523,14 @@ def main():
                     st.session_state.openai_api_key,
                     st.session_state.model_name,
                     # Only pass pdf/zip path when in the matching mode
-                    st.session_state.uploaded_pdf_path if st.session_state.input_mode == "upload" else None,
+                    st.session_state.uploaded_pdf_path
+                    if st.session_state.input_mode == "upload"
+                    else None,
                     st.session_state.pdf_start_page,
                     st.session_state.pdf_end_page,
-                    latex_zip_path=st.session_state.latex_zip_path if st.session_state.input_mode == "latex_zip" else None,
+                    latex_zip_path=st.session_state.latex_zip_path
+                    if st.session_state.input_mode == "latex_zip"
+                    else None,
                 )
 
                 if success:
@@ -1344,7 +1560,7 @@ def main():
                     st.session_state.pdf_path = (
                         f"source/{st.session_state.paper_id}/slides.pdf"
                     )
-                    
+
                     # Ensure initial history exists after first successful compile
                     ensure_initial_history(st.session_state.paper_id)
                 else:
@@ -1358,23 +1574,24 @@ def main():
             and os.path.exists(st.session_state.pdf_path)
             and st.session_state.pipeline_status == "completed"
         ):
-
             st.subheader("📄 Generated Slides")
-            
+
             # Buttons row: Download PDF, Generate Speaker Notes, Download Speaker Notes
             col_pdf, col_gen_notes, col_dl_notes = st.columns(3)
-            
+
             with col_pdf:
                 # Extract title from the LaTeX file for the filename
                 slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
                 title = extract_title_from_latex(slides_tex_path)
                 if title:
                     # Sanitize title for filename (remove special characters)
-                    safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+                    safe_title = (
+                        re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_")
+                    )
                     filename = f"{safe_title}_slides.pdf"
                 else:
                     filename = f"{st.session_state.paper_id}_slides.pdf"
-                
+
                 with open(st.session_state.pdf_path, "rb") as f:
                     st.download_button(
                         "📥 Download as PDF",
@@ -1382,12 +1599,12 @@ def main():
                         file_name=filename,
                         mime="application/pdf",
                     )
-            
+
             with col_gen_notes:
                 if st.button("🎤 Generate Speaker Notes", key="generate_speaker_notes"):
                     st.session_state.generating_speaker_notes = True
                     st.rerun()
-            
+
             # Add optional custom instruction for speaker notes
             with st.expander("⚙️ Custom Speaker Notes Instructions (Optional)"):
                 st.session_state.speaker_notes_instruction = st.text_area(
@@ -1397,7 +1614,7 @@ def main():
                     help="Provide custom instructions to guide how the speaker notes should be generated. Leave empty to use default style.",
                     key="speaker_notes_instruction_input",
                 )
-            
+
             with col_dl_notes:
                 # Check if speaker notes exist
                 notes_file = f"source/{st.session_state.paper_id}/speaker_notes.json"
@@ -1405,23 +1622,31 @@ def main():
                     speaker_notes = load_speaker_notes(st.session_state.paper_id)
                     if speaker_notes:
                         # Extract title from the LaTeX file for the filename
-                        slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
+                        slides_tex_path = (
+                            f"source/{st.session_state.paper_id}/slides.tex"
+                        )
                         title = extract_title_from_latex(slides_tex_path)
                         if title:
                             # Sanitize title for filename (remove special characters)
-                            safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+                            safe_title = (
+                                re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_")
+                            )
                             notes_filename = f"{safe_title}_speaker_notes.txt"
                         else:
-                            notes_filename = f"{st.session_state.paper_id}_speaker_notes.txt"
-                        
+                            notes_filename = (
+                                f"{st.session_state.paper_id}_speaker_notes.txt"
+                            )
+
                         # Format notes as text for download
-                        notes_text = f"Speaker Notes for {title or st.session_state.paper_id}\n"
+                        notes_text = (
+                            f"Speaker Notes for {title or st.session_state.paper_id}\n"
+                        )
                         notes_text += "=" * 60 + "\n\n"
                         for slide_num in sorted(speaker_notes.keys()):
                             notes_text += f"Slide {slide_num}:\n"
                             notes_text += f"{speaker_notes[slide_num]}\n\n"
                             notes_text += "-" * 60 + "\n\n"
-                        
+
                         st.download_button(
                             "📥 Download Speaker Notes",
                             notes_text,
@@ -1429,34 +1654,46 @@ def main():
                             mime="text/plain",
                         )
                 else:
-                    st.button("📥 Download Speaker Notes", disabled=True, help="Generate speaker notes first")
-            
+                    st.button(
+                        "📥 Download Speaker Notes",
+                        disabled=True,
+                        help="Generate speaker notes first",
+                    )
+
             # Handle speaker notes generation
             if st.session_state.get("generating_speaker_notes", False):
                 st.session_state.generating_speaker_notes = False
-                
-                with st.spinner("🔄 Generating speaker notes for all slides... This may take a moment."):
+
+                with st.spinner(
+                    "🔄 Generating speaker notes for all slides... This may take a moment."
+                ):
                     speaker_notes = generate_speaker_notes(
                         st.session_state.paper_id,
                         st.session_state.openai_api_key,
                         st.session_state.model_name,
-                        st.session_state.openai_base_url if st.session_state.openai_base_url else None,
-                        instruction=st.session_state.get("speaker_notes_instruction", ""),
+                        st.session_state.openai_base_url
+                        if st.session_state.openai_base_url
+                        else None,
+                        instruction=st.session_state.get(
+                            "speaker_notes_instruction", ""
+                        ),
                     )
-                    
+
                     if speaker_notes:
                         if save_speaker_notes(speaker_notes, st.session_state.paper_id):
-                            st.success(f"✅ Speaker notes generated successfully for {len(speaker_notes)} slides!")
+                            st.success(
+                                f"✅ Speaker notes generated successfully for {len(speaker_notes)} slides!"
+                            )
                             st.rerun()
                         else:
                             st.error("❌ Failed to save speaker notes")
                     else:
                         st.error("❌ Failed to generate speaker notes")
-            
+
             display_pdf_as_images(
                 st.session_state.pdf_path,
                 paper_id=st.session_state.paper_id,
-                enable_inline_edit=True
+                enable_inline_edit=True,
             )
 
         elif st.session_state.pipeline_status == "ready":

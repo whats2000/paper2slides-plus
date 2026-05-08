@@ -31,18 +31,21 @@ def get_pdflatex_path() -> str:
 
 
 def compile_latex(
-    tex_file_path: str, output_directory: str, pdflatex_path: str = "pdflatex", save_history: bool = True
+    tex_file_path: str,
+    output_directory: str,
+    pdflatex_path: str = "pdflatex",
+    save_history: bool = True,
 ) -> bool:
     """
     Compiles a LaTeX file to PDF using pdflatex.
     Optionally saves version history after successful compilation.
-    
+
     Args:
         tex_file_path: Path to the .tex file
         output_directory: Directory containing the tex file
         pdflatex_path: Path to pdflatex compiler
         save_history: Whether to save to version history after successful compile (default True)
-    
+
     Returns:
         True on success, False on failure.
     """
@@ -62,11 +65,21 @@ def compile_latex(
         command = [pdflatex_path, "-interaction=nonstopmode", tex_file_path]
         # First run
         result1 = subprocess.run(
-            command, cwd=output_directory, capture_output=True, text=True, encoding='utf-8', errors='replace'
+            command,
+            cwd=output_directory,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         # Second run to stabilize refs/outlines if needed
         result2 = subprocess.run(
-            command, cwd=output_directory, capture_output=True, text=True, encoding='utf-8', errors='replace'
+            command,
+            cwd=output_directory,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         combined_stdout = (result1.stdout or "") + "\n" + (result2.stdout or "")
         combined_stderr = (result1.stderr or "") + "\n" + (result2.stderr or "")
@@ -94,11 +107,11 @@ def compile_latex(
             return False
 
         logging.info(f"Successfully compiled {tex_file_path} using {pdflatex_path}.")
-        
+
         # Save to history after successful compilation (only if save_history is True)
         if save_history and full_tex_path is not None:
             _save_compile_history(full_tex_path, output_directory)
-        
+
         return True
     except FileNotFoundError:
         logging.error(
@@ -110,7 +123,7 @@ def compile_latex(
 def _save_compile_history(tex_file_path: Path, output_directory: str) -> None:
     """
     Save version history after successful compilation.
-    
+
     Args:
         tex_file_path: Path to the .tex file
         output_directory: Directory containing the tex file (e.g., "source/2302.11553/")
@@ -120,19 +133,23 @@ def _save_compile_history(tex_file_path: Path, output_directory: str) -> None:
         paper_id = Path(output_directory).name
         if not paper_id:
             # Try to get from parent path
-            paper_id = Path(output_directory).parts[-1] if Path(output_directory).parts else None
-        
+            paper_id = (
+                Path(output_directory).parts[-1]
+                if Path(output_directory).parts
+                else None
+            )
+
         if not paper_id:
             logging.debug("Could not determine paper_id for history saving")
             return
-        
+
         # Read the tex content
         tex_content = tex_file_path.read_text(encoding="utf-8", errors="ignore")
-        
+
         # Save to history
         history = get_history_manager(paper_id)
         history.save_version(tex_content, "Successful compile")
-        
+
     except Exception as e:
         logging.debug(f"Failed to save compile history: {e}")
 
@@ -150,7 +167,7 @@ def try_compile_with_fixes(
     """
     Try to compile beamer code. If it fails, attempt to fix it using the revise stage.
     Retry up to max_retries times. If all attempts fail, return None.
-    
+
     This function:
     1. Saves beamer_code to a temp file
     2. Tries to compile it
@@ -158,7 +175,7 @@ def try_compile_with_fixes(
     4. Retries compilation with fixed code
     5. Repeats up to max_retries times
     6. Returns fixed code on success, None on failure
-    
+
     Args:
         beamer_code: Beamer LaTeX code to compile
         paper_id: Paper ID
@@ -168,7 +185,7 @@ def try_compile_with_fixes(
         max_retries: Maximum number of fix attempts (default 3)
         use_paper_context: Whether to include original paper source during fixes (default True)
         workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
-        
+
     Returns:
         Successfully compiled beamer code, or None if all attempts failed
     """
@@ -180,15 +197,15 @@ def try_compile_with_fixes(
     # Determine workspace directory
     if workspace_dir is None:
         workspace_dir = f"source/{paper_id}/"
-    
+
     tex_files_directory = workspace_dir
     pdflatex_path = get_pdflatex_path()
-    
+
     # Create temp file for testing
     temp_tex_path = f"{tex_files_directory}slides_temp.tex"
-    
+
     current_code = beamer_code
-    
+
     for attempt in range(max_retries + 1):  # +1 for initial attempt
         # Save current code to temp file
         try:
@@ -197,10 +214,10 @@ def try_compile_with_fixes(
         except Exception as e:
             logging.error(f"Failed to write temp file: {e}")
             return None
-        
+
         # Try to compile the temp file
         logging.info(f"Compilation attempt {attempt + 1}/{max_retries + 1}...")
-        
+
         try:
             # Pre-sanitize frametitles
             sanitized = sanitize_frametitles(current_code)
@@ -210,7 +227,7 @@ def try_compile_with_fixes(
                 current_code = sanitized
         except Exception:
             pass
-        
+
         # Run pdflatex twice on temp file
         command = [pdflatex_path, "-interaction=nonstopmode", "slides_temp.tex"]
         try:
@@ -231,37 +248,49 @@ def try_compile_with_fixes(
                 stdout="",
                 stderr=str(e),
             )
-        
+
         # Check if PDF was created
         temp_pdf_path = f"{tex_files_directory}slides_temp.pdf"
         if run_result.returncode == 0 or Path(temp_pdf_path).exists():
             # Compilation succeeded!
             logging.info(f"✓ Compilation succeeded on attempt {attempt + 1}")
-            
+
             # Clean up temp files
             try:
-                for ext in [".aux", ".log", ".nav", ".out", ".snm", ".toc", ".pdf", ".fls", ".fdb_latexmk"]:
+                for ext in [
+                    ".aux",
+                    ".log",
+                    ".nav",
+                    ".out",
+                    ".snm",
+                    ".toc",
+                    ".pdf",
+                    ".fls",
+                    ".fdb_latexmk",
+                ]:
                     temp_file = f"{tex_files_directory}slides_temp{ext}"
                     if Path(temp_file).exists():
                         Path(temp_file).unlink()
             except Exception:
                 pass
-            
+
             return current_code
-        
+
         # Compilation failed
         if attempt < max_retries:
             # Try to fix it
-            logging.warning(f"✗ Compilation failed on attempt {attempt + 1}. Attempting to fix...")
-            
+            logging.warning(
+                f"✗ Compilation failed on attempt {attempt + 1}. Attempting to fix..."
+            )
+
             # Run chktex linter on temp file
             try:
                 subprocess.run(
                     ["chktex", "-o", "linter_temp.log", "slides_temp.tex"],
                     cwd=tex_files_directory,
                     capture_output=True,
-                    encoding='utf-8',
-                    errors='replace',
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 linter_log_path = f"{tex_files_directory}linter_temp.log"
                 if Path(linter_log_path).exists():
@@ -271,18 +300,18 @@ def try_compile_with_fixes(
                     linter_log = "No linter output available."
             except Exception:
                 linter_log = "Linter not available."
-            
+
             # Load context for fix (respecting use_paper_context flag)
             if use_paper_context:
                 latex_source = load_latex_source(tex_files_directory)
             else:
                 latex_source = ""
             figure_paths = find_image_files(tex_files_directory)
-            
+
             # Use revise stage to fix
             try:
                 system_message, user_prompt = prompt_manager.build_prompt(
-                    stage='revise',
+                    stage="revise",
                     latex_source=latex_source,
                     beamer_code=current_code,
                     linter_log=linter_log,
@@ -295,29 +324,40 @@ def try_compile_with_fixes(
                     model_name=model_name,
                     base_url=base_url,
                 )
-                
+
                 if fixed_code:
                     current_code = sanitize_frametitles(fixed_code)
                     logging.info(f"Generated fix for attempt {attempt + 2}")
                 else:
                     logging.error("Failed to generate fix")
                     break
-                    
+
             except Exception as e:
                 logging.error(f"Error generating fix: {e}")
                 break
         else:
             # Max retries reached
             logging.error(f"✗ All {max_retries + 1} compilation attempts failed")
-    
+
     # Clean up temp files
     try:
-        for ext in [".tex", ".aux", ".log", ".nav", ".out", ".snm", ".toc", ".pdf", ".fls", ".fdb_latexmk"]:
+        for ext in [
+            ".tex",
+            ".aux",
+            ".log",
+            ".nav",
+            ".out",
+            ".snm",
+            ".toc",
+            ".pdf",
+            ".fls",
+            ".fdb_latexmk",
+        ]:
             temp_file = f"{tex_files_directory}slides_temp{ext}"
             if Path(temp_file).exists():
                 Path(temp_file).unlink()
     except Exception as e:
         # Cleanup errors are non-fatal but logged for diagnostics
         logging.debug("Failed to clean up temp files in %s: %s", tex_files_directory, e)
-    
+
     return None

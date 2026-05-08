@@ -40,6 +40,7 @@ from .llm_client import (
     call_llm,
     prompt_manager,
 )
+
 # Import from specialized modules
 from .pdf_utils import extract_text_from_pdf, extract_images_from_pdf, generate_pdf_id
 
@@ -58,7 +59,7 @@ def edit_slides(
 ) -> str | None:
     """
     Edits the Beamer code based on the user's instruction.
-    
+
     Args:
         beamer_code: Current Beamer LaTeX code
         instruction: User's editing instruction
@@ -80,7 +81,9 @@ def edit_slides(
     if use_paper_context and paper_id:
         latex_source = load_latex_source(workspace_dir)
         if latex_source:
-            logging.info(f"Loaded original paper source for editing context (paper {paper_id})")
+            logging.info(
+                f"Loaded original paper source for editing context (paper {paper_id})"
+            )
         else:
             logging.debug(f"No original paper source found for paper {paper_id}")
 
@@ -143,7 +146,7 @@ def edit_single_slide(
     Edits a specific slide/frame in the Beamer code based on the user's instruction.
     The specified frame is edited according to the instruction. If the instruction
     asks to split the frame, multiple frames will be created to replace the original.
-    
+
     Args:
         beamer_code: Full Beamer LaTeX code
         frame_number: Frame number to edit (1-indexed, matching PDF page numbers)
@@ -154,7 +157,7 @@ def edit_single_slide(
         paper_id: Paper ID to load latex source from workspace
         use_paper_context: Whether to include original paper source as context (default True)
         workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
-        
+
     Returns:
         Updated full Beamer code with the frame edited (or split into multiple frames), or None on error
     """
@@ -169,7 +172,9 @@ def edit_single_slide(
     if use_paper_context and paper_id:
         latex_source = load_latex_source(workspace_dir)
         if latex_source:
-            logging.info(f"Loaded original paper source for editing context (paper {paper_id})")
+            logging.info(
+                f"Loaded original paper source for editing context (paper {paper_id})"
+            )
         else:
             logging.debug(f"No original paper source found for paper {paper_id}")
 
@@ -179,7 +184,7 @@ def edit_single_slide(
         if not frame_content:
             logging.error("Preamble not found in Beamer code")
             return None
-        
+
         # Use preamble-specific prompt
         system_message, user_prompt = prompt_manager.build_prompt(
             stage="interactive_edit_preamble",
@@ -206,7 +211,9 @@ def edit_single_slide(
         )
 
     try:
-        edited_frame_content = call_llm(system_message, user_prompt, api_key, model_name, base_url)
+        edited_frame_content = call_llm(
+            system_message, user_prompt, api_key, model_name, base_url
+        )
         if not edited_frame_content:
             logging.error("Failed to extract edited frame from LLM response")
             return None
@@ -221,7 +228,9 @@ def edit_single_slide(
                 logging.error("Failed to replace preamble in Beamer code")
                 return None
         else:
-            updated_beamer_code = replace_frame_in_beamer(beamer_code, frame_number, edited_frame_content)
+            updated_beamer_code = replace_frame_in_beamer(
+                beamer_code, frame_number, edited_frame_content
+            )
             if not updated_beamer_code:
                 logging.error(f"Failed to replace frame {frame_number} in Beamer code")
                 return None
@@ -244,7 +253,9 @@ def edit_single_slide(
                 logging.info("✓ Single slide edit successful and compiled")
                 return compiled_code
             else:
-                logging.error("✗ Single slide edit failed to compile after all fix attempts")
+                logging.error(
+                    "✗ Single slide edit failed to compile after all fix attempts"
+                )
                 return None
         else:
             # No paper_id, return without compiling
@@ -281,7 +292,7 @@ def _generate_slides_with_stages(
     """
     # Stage 1: initial generation from source
     system_message, user_prompt = prompt_manager.build_prompt(
-        stage='initial',
+        stage="initial",
         latex_source=formatted_source,
         beamer_code="",
         linter_log="",
@@ -298,7 +309,7 @@ def _generate_slides_with_stages(
     logging.info("Stage 2: refining slides with update prompt...")
     beamer_code = read_file(slides_tex_path)
     system_message, user_prompt = prompt_manager.build_prompt(
-        stage='update',
+        stage="update",
         latex_source=formatted_source,
         beamer_code=beamer_code,
         linter_log="",
@@ -320,7 +331,7 @@ def _generate_slides_with_stages(
     logging.info("Stage 3: Attempting to compile and fix if needed...")
     # Extract paper_id from tex_files_directory
     paper_id = Path(tex_files_directory).name or Path(tex_files_directory).parts[-1]
-    
+
     compiled_code = try_compile_with_fixes(
         result,
         paper_id,
@@ -331,7 +342,7 @@ def _generate_slides_with_stages(
         use_paper_context=True,
         workspace_dir=tex_files_directory,
     )
-    
+
     if compiled_code:
         with open(slides_tex_path, "w", encoding="utf-8") as f:
             f.write(compiled_code)
@@ -356,7 +367,7 @@ def generate_slides(
 ) -> bool:
     """
     Generate slides from an arXiv paper.
-    
+
     Args:
         arxiv_id: arXiv paper ID
         use_linter: Whether to use ChkTeX linter
@@ -365,7 +376,7 @@ def generate_slides(
         model_name: Model to use for generation
         base_url: Optional base URL for API
         workspace_dir: Workspace directory path (defaults to source/{arxiv_id}/ if not provided)
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -561,7 +572,7 @@ def generate_slides_from_pdf(
 ) -> bool:
     """
     Generate slides from a local PDF file (not from arXiv).
-    
+
     Args:
         pdf_path: Path to the PDF file
         paper_id: Unique identifier for this paper (will be generated if from uploaded PDF)
@@ -574,7 +585,7 @@ def generate_slides_from_pdf(
         start_page: Starting page number (1-indexed, inclusive). If None, starts from page 1.
         end_page: Ending page number (1-indexed, inclusive). If None, goes to last page.
         workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -617,7 +628,9 @@ def generate_slides_from_pdf(
     try:
         pdf_text = extract_text_from_pdf(pdf_path_for_processing, start_page, end_page)
         if not pdf_text.strip():
-            logging.error("No text content extracted from PDF. The PDF might be image-based or empty.")
+            logging.error(
+                "No text content extracted from PDF. The PDF might be image-based or empty."
+            )
             return False
     except Exception as e:
         logging.error(f"Failed to extract text from PDF: {e}")
@@ -626,7 +639,9 @@ def generate_slides_from_pdf(
     # Extract images from PDF
     logging.info(f"Extracting images from PDF: {pdf_path_for_processing}")
     try:
-        figure_paths = extract_images_from_pdf(pdf_path_for_processing, tex_files_directory, start_page, end_page)
+        figure_paths = extract_images_from_pdf(
+            pdf_path_for_processing, tex_files_directory, start_page, end_page
+        )
         if figure_paths:
             logging.info(f"Successfully extracted {len(figure_paths)} images from PDF")
         else:
@@ -673,7 +688,7 @@ def generate_speaker_notes(
 ) -> dict[int, str] | None:
     """
     Generate speaker notes for all slides in a presentation using a single LLM call.
-    
+
     Args:
         paper_id: Paper ID to load presentation and source from
         api_key: API key for LLM
@@ -681,7 +696,7 @@ def generate_speaker_notes(
         base_url: Optional base URL for API
         instruction: Optional custom instruction for speaker note generation
         workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
-        
+
     Returns:
         Dictionary mapping frame number to speaker notes, or None on error
     """
@@ -716,7 +731,9 @@ def generate_speaker_notes(
     # speaker note per PDF page without us touching any LaTeX content.
     annotated_beamer_code = annotate_overlay_frames(beamer_code)
 
-    logging.info(f"Found {len(frames)} PDF pages. Generating speaker notes in a single call...")
+    logging.info(
+        f"Found {len(frames)} PDF pages. Generating speaker notes in a single call..."
+    )
 
     # Use PromptManager to get prompts (no frame-specific info needed)
     system_message, user_prompt = prompt_manager.build_prompt(
@@ -731,20 +748,22 @@ def generate_speaker_notes(
     try:
         # For speaker notes, we need the raw response text, not extracted code
         response = call_llm(
-            system_message, 
-            user_prompt, 
-            api_key, 
-            model_name, 
+            system_message,
+            user_prompt,
+            api_key,
+            model_name,
             base_url,
-            extract_code=False  # Get raw text response instead of extracting code blocks
+            extract_code=False,  # Get raw text response instead of extracting code blocks
         )
-        
+
         if not response:
             logging.error("Failed to generate speaker notes from LLM - empty response")
             return None
-        
+
         if not response.strip():
-            logging.error("Failed to generate speaker notes from LLM - response is whitespace only")
+            logging.error(
+                "Failed to generate speaker notes from LLM - response is whitespace only"
+            )
             return None
 
         # Parse the response to extract notes for each slide
@@ -752,17 +771,20 @@ def generate_speaker_notes(
 
         # Split by [SLIDE N] markers
         import re
-        pattern = r'\[SLIDE\s+(\d+)\]\s*\n(.*?)(?=\[SLIDE\s+\d+\]|\Z)'
+
+        pattern = r"\[SLIDE\s+(\d+)\]\s*\n(.*?)(?=\[SLIDE\s+\d+\]|\Z)"
         matches = re.findall(pattern, response, re.DOTALL)
 
         if not matches:
             # Maybe the LLM didn't follow the format exactly - try alternative patterns
             logging.warning("No [SLIDE N] markers found. Trying alternative formats...")
-            
+
             # Try "Slide N:" format
-            pattern2 = r'(?:Slide|SLIDE)\s+(\d+)[:\s]*\n(.*?)(?=(?:Slide|SLIDE)\s+\d+|\Z)'
+            pattern2 = (
+                r"(?:Slide|SLIDE)\s+(\d+)[:\s]*\n(.*?)(?=(?:Slide|SLIDE)\s+\d+|\Z)"
+            )
             matches = re.findall(pattern2, response, re.DOTALL | re.IGNORECASE)
-            
+
             if not matches:
                 logging.error("Could not parse speaker notes from LLM response")
                 logging.error(f"Response preview: {response[:1000]}...")
@@ -775,32 +797,39 @@ def generate_speaker_notes(
 
         # Verify we got notes for all slides
         if len(speaker_notes) != len(frames):
-            logging.warning(f"Expected notes for {len(frames)} slides but got {len(speaker_notes)}")
+            logging.warning(
+                f"Expected notes for {len(frames)} slides but got {len(speaker_notes)}"
+            )
             # Fill in missing slides with empty notes
             for i in range(1, len(frames) + 1):
                 if i not in speaker_notes:
                     speaker_notes[i] = ""
                     logging.warning(f"No notes found for slide {i}")
 
-        logging.info(f"✓ Speaker notes generation completed for {len(speaker_notes)} slides")
+        logging.info(
+            f"✓ Speaker notes generation completed for {len(speaker_notes)} slides"
+        )
         return speaker_notes
 
     except Exception as e:
         logging.error(f"Error generating speaker notes: {e}")
         import traceback
+
         logging.error(traceback.format_exc())
         return None
 
 
-def save_speaker_notes(speaker_notes: dict[int, str], paper_id: str, workspace_dir: str | None = None) -> bool:
+def save_speaker_notes(
+    speaker_notes: dict[int, str], paper_id: str, workspace_dir: str | None = None
+) -> bool:
     """
     Save speaker notes to a JSON file in the project directory.
-    
+
     Args:
         speaker_notes: Dictionary mapping frame number to speaker notes
         paper_id: Paper ID
         workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -822,14 +851,16 @@ def save_speaker_notes(speaker_notes: dict[int, str], paper_id: str, workspace_d
         return False
 
 
-def load_speaker_notes(paper_id: str, workspace_dir: str | None = None) -> dict[int, str] | None:
+def load_speaker_notes(
+    paper_id: str, workspace_dir: str | None = None
+) -> dict[int, str] | None:
     """
     Load speaker notes from a JSON file in the project directory.
-    
+
     Args:
         paper_id: Paper ID
         workspace_dir: Workspace directory path (defaults to source/{paper_id}/ if not provided)
-        
+
     Returns:
         Dictionary mapping frame number to speaker notes, or None if not found
     """
@@ -857,23 +888,22 @@ def load_speaker_notes(paper_id: str, workspace_dir: str | None = None) -> dict[
         return None
 
 
-
 # Re-export commonly used functions for backwards compatibility
 __all__ = [
-    'generate_slides',
-    'generate_slides_from_pdf',
-    'generate_slides_from_latex_zip',
-    'edit_slides',
-    'edit_single_slide',
-    'compile_latex',
-    'extract_frames_from_beamer',
-    'get_frame_by_number',
-    'replace_frame_in_beamer',
-    'search_arxiv',
-    'generate_pdf_id',
-    'extract_text_from_pdf',
-    'extract_images_from_pdf',
-    'generate_speaker_notes',
-    'save_speaker_notes',
-    'load_speaker_notes',
+    "generate_slides",
+    "generate_slides_from_pdf",
+    "generate_slides_from_latex_zip",
+    "edit_slides",
+    "edit_single_slide",
+    "compile_latex",
+    "extract_frames_from_beamer",
+    "get_frame_by_number",
+    "replace_frame_in_beamer",
+    "search_arxiv",
+    "generate_pdf_id",
+    "extract_text_from_pdf",
+    "extract_images_from_pdf",
+    "generate_speaker_notes",
+    "save_speaker_notes",
+    "load_speaker_notes",
 ]

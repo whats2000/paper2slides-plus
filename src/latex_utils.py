@@ -57,7 +57,7 @@ def save_additional_tex(contents: str, dest_dir: str) -> None:
 def save_latex_source(latex_source: str, dest_dir: str) -> None:
     """
     Save the original LaTeX source to a file for later reference during editing.
-    
+
     Args:
         latex_source: The LaTeX source content
         dest_dir: Directory to save the file (e.g., "source/2302.11553/")
@@ -75,10 +75,10 @@ def save_latex_source(latex_source: str, dest_dir: str) -> None:
 def load_latex_source(source_dir: str) -> str:
     """
     Load the original LaTeX source from the saved file.
-    
+
     Args:
         source_dir: Directory containing the saved file (e.g., "source/2302.11553/")
-        
+
     Returns:
         LaTeX source content, or empty string if not available
     """
@@ -101,9 +101,7 @@ def add_additional_tex(content: str) -> str:
     if "\\input{ADDITIONAL.tex}" in content:
         return content
     # Insert after documentclass line
-    pattern = re.compile(
-        r"(\\documentclass\[[^]]*]\{beamer}|\\documentclass\{beamer})"
-    )
+    pattern = re.compile(r"(\\documentclass\[[^]]*]\{beamer}|\\documentclass\{beamer})")
 
     def _inserter(m: re.Match) -> str:
         return m.group(1) + "\n\\input{ADDITIONAL.tex}"
@@ -120,10 +118,10 @@ def sanitize_frametitles(beamer_code: str) -> str:
     Escapes unescaped ampersands inside \frametitle and its arguments.
     Also sanitizes titles provided via \begin{frame}{...} with optional [options].
     Handles <...>, [...], and {...} arguments with optional whitespace.
-    
+
     Additionally fixes common LaTeX syntax errors that LLMs tend to produce,
     such as \\end{frame> instead of \\end{frame}.
-    
+
     Also ensures commonly needed packages are loaded (booktabs, multirow)
     and defines common math macros (\\bx, \\by) if not already defined.
     """
@@ -131,39 +129,53 @@ def sanitize_frametitles(beamer_code: str) -> str:
         return ""
 
     # Fix common LLM errors: \end{...> and \begin{...> where > should be }
-    beamer_code = re.sub(r'\\end\{([^}]+)>', r'\\end{\1}', beamer_code)
-    beamer_code = re.sub(r'\\begin\{([^}]+)>', r'\\begin{\1}', beamer_code)
+    beamer_code = re.sub(r"\\end\{([^}]+)>", r"\\end{\1}", beamer_code)
+    beamer_code = re.sub(r"\\begin\{([^}]+)>", r"\\begin{\1}", beamer_code)
 
     # Ensure commonly needed packages are loaded after \documentclass
     # These are often used by LLMs but not explicitly loaded
     packages_to_ensure = []
-    
+
     # Check for booktabs commands (\toprule, \midrule, \bottomrule, \cmidrule)
-    if re.search(r'\\(toprule|midrule|bottomrule|cmidrule)', beamer_code):
-        if '\\usepackage{booktabs}' not in beamer_code and '\\usepackage[' not in beamer_code or 'booktabs' not in beamer_code:
-            packages_to_ensure.append('\\usepackage{booktabs}')
-    
+    if re.search(r"\\(toprule|midrule|bottomrule|cmidrule)", beamer_code):
+        if (
+            "\\usepackage{booktabs}" not in beamer_code
+            and "\\usepackage[" not in beamer_code
+            or "booktabs" not in beamer_code
+        ):
+            packages_to_ensure.append("\\usepackage{booktabs}")
+
     # Check for \multirow command
-    if '\\multirow' in beamer_code:
-        if '\\usepackage{multirow}' not in beamer_code:
-            packages_to_ensure.append('\\usepackage{multirow}')
-    
+    if "\\multirow" in beamer_code:
+        if "\\usepackage{multirow}" not in beamer_code:
+            packages_to_ensure.append("\\usepackage{multirow}")
+
     # Check for \bx, \by (common bold vector macros) - define them if not present
     math_macros = []
-    if '\\bx' in beamer_code and '\\newcommand{\\bx}' not in beamer_code and '\\def\\bx' not in beamer_code:
-        math_macros.append('\\providecommand{\\bx}{\\mathbf{x}}')
-    if '\\by' in beamer_code and '\\newcommand{\\by}' not in beamer_code and '\\def\\by' not in beamer_code:
-        math_macros.append('\\providecommand{\\by}{\\mathbf{y}}')
-    
+    if (
+        "\\bx" in beamer_code
+        and "\\newcommand{\\bx}" not in beamer_code
+        and "\\def\\bx" not in beamer_code
+    ):
+        math_macros.append("\\providecommand{\\bx}{\\mathbf{x}}")
+    if (
+        "\\by" in beamer_code
+        and "\\newcommand{\\by}" not in beamer_code
+        and "\\def\\by" not in beamer_code
+    ):
+        math_macros.append("\\providecommand{\\by}{\\mathbf{y}}")
+
     # Insert packages and macros after \documentclass line
     if packages_to_ensure or math_macros:
-        additions = '\n'.join(packages_to_ensure + math_macros)
+        additions = "\n".join(packages_to_ensure + math_macros)
         # Find position after \documentclass{beamer} or \documentclass[...]{beamer}
-        docclass_pattern = re.compile(r'(\\documentclass(?:\[[^\]]*\])?\{beamer\})')
+        docclass_pattern = re.compile(r"(\\documentclass(?:\[[^\]]*\])?\{beamer\})")
         match = docclass_pattern.search(beamer_code)
         if match:
             insert_pos = match.end()
-            beamer_code = beamer_code[:insert_pos] + '\n' + additions + beamer_code[insert_pos:]
+            beamer_code = (
+                beamer_code[:insert_pos] + "\n" + additions + beamer_code[insert_pos:]
+            )
 
     # 1) Sanitize titles in \begin{frame}[opts]{Title}
     def repl_frame(match):

@@ -8,5 +8,5 @@ generation process.
 
 from .manager import PromptManager, get_prompt_manager
 
-__all__ = ['PromptManager', 'get_prompt_manager']
-__version__ = '1.0.0'
+__all__ = ["PromptManager", "get_prompt_manager"]
+__version__ = "1.0.0"

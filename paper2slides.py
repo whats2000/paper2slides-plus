@@ -129,7 +129,7 @@ def get_arxiv_id(query: str) -> str | None:
         print("Found the following papers:")
         for i, result in enumerate(results):
             print(
-                f"[{i+1}] {result.title} (by {', '.join(author.name for author in result.authors)})"
+                f"[{i + 1}] {result.title} (by {', '.join(author.name for author in result.authors)})"
             )
 
         while True:
@@ -159,34 +159,36 @@ def cmd_generate(args) -> int:
         Exit code
     """
     logger.info("=" * 60)
-    
+
     # Check if PDF file is provided
-    if hasattr(args, 'pdf') and args.pdf:
+    if hasattr(args, "pdf") and args.pdf:
         pdf_path = args.pdf
         if not os.path.exists(pdf_path):
             logger.error(f"PDF file not found: {pdf_path}")
             return 1
-        
+
         logger.info("GENERATING SLIDES FROM PDF FILE")
         logger.info("=" * 60)
-        
+
         # Generate a unique ID for the PDF
         paper_id = generate_pdf_id(pdf_path)
         logger.info(f"Generated paper ID: {paper_id}")
-        
+
         success = generate_slides_from_pdf(
             pdf_path=pdf_path,
             paper_id=paper_id,
-            use_linter=args.use_linter if hasattr(args, 'use_linter') else False,
-            use_pdfcrop=args.use_pdfcrop if hasattr(args, 'use_pdfcrop') else False,
-            api_key=args.api_key if hasattr(args, 'api_key') else None,
-            model_name=args.model if hasattr(args, 'model') and args.model else None,
-            base_url=args.base_url if hasattr(args, 'base_url') else None,
-            dashscope_base_url=args.dashscope_base_url if hasattr(args, 'dashscope_base_url') else None,
-            start_page=getattr(args, 'start_page', None),
-            end_page=getattr(args, 'end_page', None),
+            use_linter=args.use_linter if hasattr(args, "use_linter") else False,
+            use_pdfcrop=args.use_pdfcrop if hasattr(args, "use_pdfcrop") else False,
+            api_key=args.api_key if hasattr(args, "api_key") else None,
+            model_name=args.model if hasattr(args, "model") and args.model else None,
+            base_url=args.base_url if hasattr(args, "base_url") else None,
+            dashscope_base_url=args.dashscope_base_url
+            if hasattr(args, "dashscope_base_url")
+            else None,
+            start_page=getattr(args, "start_page", None),
+            end_page=getattr(args, "end_page", None),
         )
-        
+
         if success:
             logger.info(f"✓ Slides generated successfully in source/{paper_id}/")
             # Store paper_id for compile step
@@ -195,7 +197,7 @@ def cmd_generate(args) -> int:
         else:
             logger.error("✗ Slide generation failed")
             return 1
-    
+
     # Otherwise, handle arXiv paper
     logger.info("GENERATING SLIDES FROM ARXIV PAPER")
     logger.info("=" * 60)
@@ -260,7 +262,7 @@ def cmd_all(args) -> int:
     logger.info("=" * 60)
 
     # Determine paper_id based on input type
-    if hasattr(args, 'pdf') and args.pdf:
+    if hasattr(args, "pdf") and args.pdf:
         # PDF file provided
         if not os.path.exists(args.pdf):
             logger.error(f"PDF file not found: {args.pdf}")
@@ -283,17 +285,17 @@ def cmd_all(args) -> int:
         return exit_code
 
     # Update args with paper_id if it was generated from PDF
-    if hasattr(args, 'paper_id'):
+    if hasattr(args, "paper_id"):
         paper_id = args.paper_id
 
     # Step 2: Compile to PDF
     # Temporarily set query to paper_id for compile step
-    original_query = args.query if hasattr(args, 'query') else None
+    original_query = args.query if hasattr(args, "query") else None
     args.query = paper_id
     exit_code = cmd_compile(args)
     if original_query:
         args.query = original_query
-    
+
     if exit_code != 0:
         logger.error("Pipeline failed at PDF compilation step")
         return exit_code
@@ -361,10 +363,17 @@ Running without subcommand defaults to 'all':
         description="Generate Beamer slides from an arXiv paper or local PDF file using LLM",
     )
     parser_generate.add_argument(
-        "query", type=str, nargs='?', default=None, help="ArXiv ID or search query for the paper (not needed with --pdf)"
+        "query",
+        type=str,
+        nargs="?",
+        default=None,
+        help="ArXiv ID or search query for the paper (not needed with --pdf)",
     )
     parser_generate.add_argument(
-        "--pdf", type=str, default=None, help="Path to a local PDF file to generate slides from"
+        "--pdf",
+        type=str,
+        default=None,
+        help="Path to a local PDF file to generate slides from",
     )
     parser_generate.add_argument(
         "--use_linter",
@@ -418,10 +427,17 @@ Running without subcommand defaults to 'all':
         description="Complete pipeline: generate slides, compile to PDF, and open result",
     )
     parser_all.add_argument(
-        "query", type=str, nargs='?', default=None, help="ArXiv ID or search query for the paper (not needed with --pdf)"
+        "query",
+        type=str,
+        nargs="?",
+        default=None,
+        help="ArXiv ID or search query for the paper (not needed with --pdf)",
     )
     parser_all.add_argument(
-        "--pdf", type=str, default=None, help="Path to a local PDF file to generate slides from"
+        "--pdf",
+        type=str,
+        default=None,
+        help="Path to a local PDF file to generate slides from",
     )
     parser_all.add_argument(
         "--use_linter",
@@ -511,9 +527,11 @@ def main():
         return 1
 
     # Validate that either query or --pdf is provided for generate/all commands
-    if hasattr(args, 'func') and args.func in [cmd_generate, cmd_all]:
-        if not getattr(args, 'pdf', None) and not getattr(args, 'query', None):
-            logger.error("Error: Either provide an arXiv ID/query or use --pdf to specify a PDF file")
+    if hasattr(args, "func") and args.func in [cmd_generate, cmd_all]:
+        if not getattr(args, "pdf", None) and not getattr(args, "query", None):
+            logger.error(
+                "Error: Either provide an arXiv ID/query or use --pdf to specify a PDF file"
+            )
             return 1
 
     # Check if required files exist

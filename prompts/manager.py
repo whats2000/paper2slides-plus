@@ -204,13 +204,13 @@ class PromptManager:
     def build_prompt(
         self,
         stage: Literal[
-            'initial',
-            'update',
-            'revise',
-            'interactive_edit',
-            'interactive_edit_preamble',
-            'interactive_edit_single_slide',
-            'generate_speaker_notes'
+            "initial",
+            "update",
+            "revise",
+            "interactive_edit",
+            "interactive_edit_preamble",
+            "interactive_edit_single_slide",
+            "generate_speaker_notes",
         ],
         latex_source: str = "",
         beamer_code: str = "",
@@ -228,7 +228,7 @@ class PromptManager:
         """
         # Assemble variables expected by templates
         variables: Dict[str, Any] = {}
-        
+
         # Handle different stage types
         if stage in ("initial", "update", "revise"):
             variables["latex_source"] = latex_source
