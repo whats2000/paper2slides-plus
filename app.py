@@ -1,10 +1,12 @@
 import base64
 import datetime
+import difflib
 import logging
 import os
 import re
 import tempfile
 import shutil
+import uuid
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -175,6 +177,25 @@ def get_current_viewer_page(total_frames: int | None = None) -> int:
 
     st.session_state.selected_frame_number = current_page
     return current_page
+
+
+def compute_unified_diff(
+    old_text: str,
+    new_text: str,
+    fromfile: str = "before",
+    tofile: str = "after",
+    context_lines: int = 3,
+) -> str:
+    """Return a unified diff between two LaTeX source blobs.
+
+    Empty result means the texts are identical.
+    """
+    old_lines = old_text.splitlines(keepends=True)
+    new_lines = new_text.splitlines(keepends=True)
+    diff_iter = difflib.unified_diff(
+        old_lines, new_lines, fromfile=fromfile, tofile=tofile, n=context_lines
+    )
+    return "".join(diff_iter)
 
 
 def append_chat_message(role: str, content: str, display: bool = True):
@@ -617,6 +638,12 @@ def main():
         st.session_state.pending_edit = None
         st.session_state.total_frames = 0
 
+    # Revert data for the most recent AI edit (single-level undo). Holds the
+    # pre-edit slides.tex content + the chat-message id of the rich success
+    # message so we can show the Revert button only on the latest edit.
+    if "latest_edit_revert" not in st.session_state:
+        st.session_state.latest_edit_revert = None
+
     # Page range for PDF processing
     if "pdf_start_page" not in st.session_state:
         st.session_state.pdf_start_page = None
@@ -677,6 +704,8 @@ def main():
             st.session_state.pdf_path = None
             st.session_state.pipeline_status = "ready"
             st.session_state.messages = []
+            st.session_state.latest_edit_revert = None
+            st.session_state.pending_edit = None
             st.session_state.input_mode = new_mode
 
         if st.session_state.input_mode == "arxiv":
@@ -1460,12 +1489,83 @@ def main():
                     width="stretch",
                 ):
                     st.session_state.messages = []
+                    # Drop revert state too — once the ai_edit message is gone
+                    # there's no UI to surface the Revert button.
+                    st.session_state.latest_edit_revert = None
                     st.rerun()
 
-            # Display chat messages
+            # Display chat messages. Rich "ai_edit" messages render the success
+            # text plus a collapsed diff expander; the most recent ai_edit also
+            # gets a Revert button (older edits roll back via Version History).
             for message in st.session_state.messages:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
+
+                    if message.get("type") == "ai_edit":
+                        diff_text = message.get("diff", "")
+                        if diff_text.strip():
+                            with st.expander("📋 View diff", expanded=False):
+                                st.code(diff_text, language="diff")
+                        else:
+                            st.caption("(No textual changes — source was identical.)")
+
+                        latest_revert = st.session_state.get("latest_edit_revert")
+                        is_latest_revertible = (
+                            latest_revert is not None
+                            and latest_revert.get("edit_id") == message.get("edit_id")
+                        )
+                        if is_latest_revertible:
+                            previous_filename = latest_revert.get(
+                                "previous_version_filename"
+                            )
+                            revert_disabled = previous_filename is None
+                            revert_help = (
+                                "Restore slides.tex to the snapshot before this edit (uses Version History's Restore path)."
+                                if not revert_disabled
+                                else "No prior snapshot in Version History — nothing to revert to."
+                            )
+                            if st.button(
+                                "↩️ Revert this edit",
+                                key=f"revert_{message['edit_id']}",
+                                help=revert_help,
+                                disabled=revert_disabled,
+                            ):
+                                with st.spinner("Reverting and recompiling..."):
+                                    history_mgr = get_history_manager(
+                                        st.session_state.paper_id
+                                    )
+                                    slides_tex_path = (
+                                        f"source/{st.session_state.paper_id}/slides.tex"
+                                    )
+                                    if history_mgr.restore_version(
+                                        previous_filename, slides_tex_path
+                                    ):
+                                        # Mirror Version History's Restore: do
+                                        # not save_history on recompile so we
+                                        # don't create a duplicate snapshot.
+                                        if run_compile_step(
+                                            st.session_state.paper_id,
+                                            st.session_state.pdflatex_path,
+                                            save_history=False,
+                                        ):
+                                            current_version_key = f"current_version_{st.session_state.paper_id}"
+                                            st.session_state[current_version_key] = (
+                                                previous_filename
+                                            )
+                                            append_chat_message(
+                                                "assistant",
+                                                f"↩️ Reverted: {latest_revert['scope_label']} (restored prior version)",
+                                                display=False,
+                                            )
+                                            st.session_state.latest_edit_revert = None
+                                            st.session_state.pdf_path = f"source/{st.session_state.paper_id}/slides.pdf"
+                                            st.rerun()
+                                        else:
+                                            st.error(
+                                                "Revert restored slides.tex but recompile failed. Use Version History to recover."
+                                            )
+                                    else:
+                                        st.error("Failed to restore prior version.")
 
             # Chat input
             if prompt := st.chat_input("Your instructions to edit the slides..."):
@@ -1560,6 +1660,17 @@ def main():
                         )
 
                     if new_beamer_code:
+                        # Capture the latest history filename BEFORE the
+                        # upcoming compile saves a new snapshot — that's the
+                        # rollback target for the Revert button. Reusing
+                        # history.restore_version keeps revert consistent with
+                        # the Version History panel's "Restore" path.
+                        history_mgr_pre = get_history_manager(st.session_state.paper_id)
+                        pre_versions = history_mgr_pre.list_versions()
+                        previous_version_filename = (
+                            pre_versions[0]["filename"] if pre_versions else None
+                        )
+
                         with open(slides_tex_path, "w", encoding="utf-8") as f:
                             f.write(new_beamer_code)
 
@@ -1578,10 +1689,40 @@ def main():
                                     0
                                 ]["filename"]
 
-                            # Append assistant response to chat history
-                            append_chat_message(
-                                "assistant", success_message, display=False
+                            # Build rich assistant message: success text + diff
+                            # for inspection + revert state for one-click undo.
+                            scope_label = (
+                                "All slides"
+                                if edit_info.get("mode") == "full"
+                                else f"Slide {edit_info['frame_number']}"
                             )
+                            diff_text = compute_unified_diff(
+                                beamer_code,
+                                new_beamer_code,
+                                fromfile="before/slides.tex",
+                                tofile="after/slides.tex",
+                            )
+                            edit_id = uuid.uuid4().hex[:8]
+                            st.session_state.messages.append(
+                                {
+                                    "role": "assistant",
+                                    "content": success_message,
+                                    "type": "ai_edit",
+                                    "edit_id": edit_id,
+                                    "scope_label": scope_label,
+                                    "diff": diff_text,
+                                }
+                            )
+                            # Only the most recent edit is revertible via the
+                            # one-click button — older ones roll back via the
+                            # Version History panel. previous_version_filename
+                            # may be None on a brand-new project with no prior
+                            # snapshot; the Revert button checks for that.
+                            st.session_state.latest_edit_revert = {
+                                "edit_id": edit_id,
+                                "previous_version_filename": previous_version_filename,
+                                "scope_label": scope_label,
+                            }
 
                             st.success(success_message)
                             st.session_state.pdf_path = (
