@@ -10,6 +10,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 import streamlit as st
 from dotenv import load_dotenv
+from streamlit_ace import st_ace
 
 from src.core import (
     generate_slides,
@@ -1301,12 +1302,27 @@ def main():
                         editor_value = source_content
                     editor_key = f"manual_source_single_{st.session_state.paper_id}_{current_page}_{file_mtime}"
 
-                edited_source = st.text_area(
-                    editor_label,
+                st.markdown(f"**{editor_label}**")
+                if editor_help:
+                    st.caption(editor_help)
+
+                # Use Ace editor for LaTeX with syntax highlighting, line numbers,
+                # and bracket matching. auto_update=True preserves the previous
+                # text_area UX (no explicit "apply" step before clicking Save).
+                edited_source = st_ace(
                     value=editor_value,
-                    height=360,
+                    language="latex",
+                    theme="textmate",
+                    keybinding="vscode",
+                    font_size=14,
+                    tab_size=2,
+                    show_gutter=True,
+                    show_print_margin=False,
+                    wrap=True,
+                    auto_update=True,
+                    min_lines=20,
+                    max_lines=30,
                     key=editor_key,
-                    help=editor_help,
                 )
 
                 manual_save_disabled = st.session_state.get("pending_edit") is not None
