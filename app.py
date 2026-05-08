@@ -220,45 +220,127 @@ def display_pdf(file_path):
     st.markdown(pdf_display, unsafe_allow_html=True)
 
 
+def _pdf_has_eof_trailer(file_path: str) -> bool:
+    """Return True if the file ends with a PDF %%EOF trailer.
+
+    pdflatex writes the trailer last; its presence is a strong signal that
+    writing has finished. fitz.open will happily open a partial PDF without
+    raising — but the resulting pages render blank — so we gate on this.
+    """
+    try:
+        with open(file_path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            if size < 32:
+                return False
+            f.seek(max(0, size - 1024), 0)
+            tail = f.read()
+        return b"%%EOF" in tail
+    except OSError:
+        return False
+
+
 def _open_pdf_with_retry(
-    file_path: str, attempts: int = 6, delay_seconds: float = 0.25
+    file_path: str, attempts: int = 16, delay_seconds: float = 0.25
 ):
-    """Open a PDF, retrying briefly while it's still being written.
+    """Open a PDF, retrying briefly while pdflatex is still writing/swapping it.
 
-    pdflatex writes the .pdf in chunks; if Streamlit reruns mid-write (which
-    happens often after an edit triggers compile + rerun), fitz.open lands on
-    a zero-byte file and raises "Cannot open empty file". Treat that as
-    transient and retry a handful of times before giving up.
+    Four transient states all retry within the same loop:
+      1. File does not yet exist (pdflatex hasn't written it, or briefly
+         deleted it during its temp→final swap on Windows).
+      2. File exists but is 0 bytes (write started, hasn't flushed).
+      3. File has bytes but is missing the %%EOF trailer (header written,
+         body still flushing) — fitz.open does NOT raise on this case but
+         every page renders blank, so we must check the trailer ourselves.
+      4. File has bytes and trailer but fitz.open raises or the doc reports
+         0 pages.
 
-    Truly missing files fail fast (no retry) — those need user attention, not
-    waiting.
+    The previous version short-circuited case (1) with an immediate
+    FileNotFoundError before the loop, and never checked case (3), which
+    caused intermittent blank PDF panes after refresh.
+
+    Default is now 16 attempts × 0.25s = 4s total — comfortable headroom for
+    typical Beamer decks. Truly missing/corrupt files cost the full 4s once
+    before the error surfaces.
     """
     import time
 
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(file_path)
-
     last_exc: Exception | None = None
+    last_reason: str = "unknown"
     for attempt in range(attempts):
-        try:
-            size = os.path.getsize(file_path)
-        except OSError:
-            size = 0
-
-        if size > 0:
+        exists = os.path.exists(file_path)
+        if not exists:
+            last_reason = "missing"
+            last_exc = FileNotFoundError(file_path)
+        else:
             try:
-                return fitz.open(file_path)
-            except Exception as e:
-                # Transient parse errors during a partial write also count as retryable.
-                last_exc = e
-        # else: file exists but still 0 bytes — pdflatex hasn't flushed yet
+                size = os.path.getsize(file_path)
+            except OSError:
+                size = 0
+
+            if size == 0:
+                last_reason = "empty"
+            elif not _pdf_has_eof_trailer(file_path):
+                # Body still flushing — fitz.open would open this and return
+                # blank pages without raising. Force a retry instead.
+                last_reason = "no-eof"
+                last_exc = RuntimeError(f"PDF {file_path} missing %%EOF trailer")
+            else:
+                # Even with %%EOF present, pdflatex on Windows can leave the
+                # page tree referencing objects that haven't fully landed.
+                # fitz.open succeeds, page_count looks right, but
+                # doc.load_page(0) raises "non-page object in page tree" or
+                # get_pixmap returns blank. So actually rasterize page 0 to
+                # confirm the doc is renderable before returning it.
+                doc = None
+                try:
+                    doc = fitz.open(file_path)
+                    if doc.page_count == 0:
+                        last_reason = "zero-pages"
+                        last_exc = RuntimeError(f"PDF {file_path} has 0 pages")
+                        doc.close()
+                        doc = None
+                    else:
+                        try:
+                            test_page = doc.load_page(0)
+                            test_pix = test_page.get_pixmap(alpha=False)
+                            if test_pix.width == 0 or test_pix.height == 0:
+                                last_reason = "blank-pixmap"
+                                last_exc = RuntimeError(
+                                    f"PDF {file_path} page 0 rasterized to 0×0"
+                                )
+                                doc.close()
+                                doc = None
+                            else:
+                                return doc
+                        except Exception as page_err:
+                            # "non-page object in page tree" lands here.
+                            last_reason = "page-load-error"
+                            last_exc = page_err
+                            doc.close()
+                            doc = None
+                except Exception as e:
+                    last_reason = "fitz-error"
+                    last_exc = e
+                    if doc is not None:
+                        try:
+                            doc.close()
+                        except Exception:
+                            pass
 
         if attempt < attempts - 1:
+            if attempt == 0:
+                logging.debug(
+                    f"_open_pdf_with_retry: {file_path} not ready ({last_reason}); retrying"
+                )
             time.sleep(delay_seconds)
 
     if last_exc is not None:
+        logging.warning(
+            f"_open_pdf_with_retry exhausted {attempts} attempts for {file_path}: {last_reason}"
+        )
         raise last_exc
-    raise RuntimeError(f"PDF {file_path} stayed empty after {attempts} retries")
+    raise RuntimeError(f"PDF {file_path} not ready after {attempts} retries")
 
 
 def display_pdf_as_images(
@@ -1804,9 +1886,15 @@ def main():
                 st.rerun()
 
         # Show PDF if available
+        # Gate the PDF panel on session state only. Don't os.path.exists()
+        # here: pdflatex's atomic-replace swap on Windows briefly removes the
+        # destination, and if a Streamlit rerun lands in that gap the panel
+        # would silently render the "ready" placeholder instead of the PDF.
+        # _open_pdf_with_retry inside display_pdf_as_images already handles
+        # transient missing/zero-byte/partial-write states; truly missing
+        # files surface a visible error after retries exhaust.
         if (
             st.session_state.pdf_path
-            and os.path.exists(st.session_state.pdf_path)
             and st.session_state.pipeline_status == "completed"
         ):
             st.subheader("📄 Generated Slides")
