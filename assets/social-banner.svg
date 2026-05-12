@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="slide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="dropshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="0" dy="6" result="offsetblur"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <!-- Decorative grid -->
+  <g stroke="#ffffff" stroke-opacity="0.04" stroke-width="1">
+    <path d="M0 80 H1280 M0 160 H1280 M0 240 H1280 M0 320 H1280 M0 400 H1280 M0 480 H1280 M0 560 H1280"/>
+    <path d="M80 0 V640 M160 0 V640 M240 0 V640 M320 0 V640 M400 0 V640 M480 0 V640 M560 0 V640 M640 0 V640 M720 0 V640 M800 0 V640 M880 0 V640 M960 0 V640 M1040 0 V640 M1120 0 V640 M1200 0 V640"/>
+  </g>
+
+  <!-- Glow accents -->
+  <circle cx="220" cy="320" r="280" fill="url(#glow)"/>
+  <circle cx="1080" cy="340" r="260" fill="url(#glow)"/>
+
+  <!-- Left: Paper document -->
+  <g transform="translate(110 170)" filter="url(#dropshadow)">
+    <rect x="0" y="0" width="220" height="290" rx="10" fill="url(#paper)"/>
+    <rect x="0" y="0" width="220" height="36" rx="10" fill="#3b82f6"/>
+    <rect x="0" y="20" width="220" height="16" fill="#3b82f6"/>
+    <!-- Title bar lines -->
+    <rect x="20" y="56" width="160" height="10" rx="3" fill="#1e293b"/>
+    <rect x="20" y="74" width="120" height="6" rx="2" fill="#94a3b8"/>
+    <!-- Body text lines -->
+    <g fill="#475569">
+      <rect x="20" y="100" width="180" height="5" rx="2"/>
+      <rect x="20" y="112" width="170" height="5" rx="2"/>
+      <rect x="20" y="124" width="180" height="5" rx="2"/>
+      <rect x="20" y="136" width="140" height="5" rx="2"/>
+      <rect x="20" y="156" width="180" height="5" rx="2"/>
+      <rect x="20" y="168" width="160" height="5" rx="2"/>
+      <rect x="20" y="180" width="180" height="5" rx="2"/>
+      <rect x="20" y="192" width="170" height="5" rx="2"/>
+    </g>
+    <!-- Equation block -->
+    <rect x="20" y="212" width="180" height="32" rx="4" fill="#e0e7ff"/>
+    <text x="110" y="234" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="16" fill="#4338ca">∫ f(x) dx = F(x)</text>
+    <!-- More lines -->
+    <g fill="#475569">
+      <rect x="20" y="256" width="160" height="5" rx="2"/>
+      <rect x="20" y="268" width="180" height="5" rx="2"/>
+    </g>
+    <!-- PDF tag -->
+    <rect x="160" y="-12" width="60" height="28" rx="6" fill="#ef4444"/>
+    <text x="190" y="7" text-anchor="middle" font-family="-apple-system, Segoe UI, sans-serif" font-weight="700" font-size="13" fill="#fff" dominant-baseline="middle">PDF</text>
+  </g>
+
+  <!-- Center transformation -->
+  <g transform="translate(640 315)">
+    <!-- Arrow -->
+    <g stroke="url(#accent)" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="-110" y1="0" x2="100" y2="0"/>
+      <polyline points="70,-22 110,0 70,22"/>
+    </g>
+    <!-- Sparkle / LLM emblem -->
+    <g transform="translate(0 -70)">
+      <circle r="34" fill="#0f172a" stroke="url(#accent)" stroke-width="2"/>
+      <g fill="#a78bfa">
+        <path d="M0 -20 L4 -4 L20 0 L4 4 L0 20 L-4 4 L-20 0 L-4 -4 Z"/>
+      </g>
+      <g fill="#60a5fa" opacity="0.85">
+        <circle cx="-14" cy="-14" r="2.5"/>
+        <circle cx="15" cy="13" r="2"/>
+        <circle cx="14" cy="-12" r="1.5"/>
+      </g>
+    </g>
+    <text y="60" text-anchor="middle" font-family="-apple-system, Segoe UI, sans-serif" font-weight="700" font-size="14" fill="#a78bfa" letter-spacing="2">LLM</text>
+  </g>
+
+  <!-- Right: Slide deck (3 stacked) -->
+  <g transform="translate(820 160)" filter="url(#dropshadow)">
+    <!-- Back slide -->
+    <rect x="40" y="40" width="320" height="200" rx="10" fill="#475569" opacity="0.55"/>
+    <!-- Middle slide -->
+    <rect x="20" y="20" width="320" height="200" rx="10" fill="#64748b" opacity="0.8"/>
+    <!-- Front slide -->
+    <rect x="0" y="0" width="320" height="200" rx="10" fill="url(#slide)" stroke="#475569" stroke-width="1"/>
+    <!-- Slide title bar -->
+    <rect x="0" y="0" width="320" height="36" rx="10" fill="#7c3aed"/>
+    <rect x="0" y="20" width="320" height="16" fill="#7c3aed"/>
+    <rect x="16" y="12" width="160" height="12" rx="2" fill="#fff"/>
+    <!-- Slide bullets -->
+    <g fill="#cbd5e1">
+      <circle cx="24" cy="64" r="3"/>
+      <rect x="36" y="60" width="240" height="6" rx="2"/>
+      <circle cx="24" cy="84" r="3"/>
+      <rect x="36" y="80" width="220" height="6" rx="2"/>
+      <circle cx="24" cy="104" r="3"/>
+      <rect x="36" y="100" width="240" height="6" rx="2"/>
+    </g>
+    <!-- Mini chart -->
+    <g transform="translate(20 130)">
+      <rect x="0" y="40" width="14" height="20" fill="#60a5fa"/>
+      <rect x="22" y="20" width="14" height="40" fill="#818cf8"/>
+      <rect x="44" y="30" width="14" height="30" fill="#a78bfa"/>
+      <rect x="66" y="10" width="14" height="50" fill="#c084fc"/>
+      <rect x="88" y="0" width="14" height="60" fill="#e879f9"/>
+      <line x1="0" y1="60" x2="280" y2="60" stroke="#475569" stroke-width="1"/>
+    </g>
+    <!-- Mini formula -->
+    <text x="220" y="170" font-family="Georgia, serif" font-style="italic" font-size="13" fill="#a78bfa">y = σ(Wx+b)</text>
+    <!-- BEAMER tag -->
+    <rect x="260" y="-12" width="80" height="28" rx="6" fill="#22c55e"/>
+    <text x="300" y="7" text-anchor="middle" font-family="-apple-system, Segoe UI, sans-serif" font-weight="700" font-size="13" fill="#052e16" dominant-baseline="middle">SLIDES</text>
+  </g>
+
+  <!-- Title text -->
+  <g transform="translate(640 530)" text-anchor="middle">
+    <text font-family="-apple-system, Segoe UI, Helvetica, sans-serif" font-weight="800" font-size="64" fill="#f8fafc" letter-spacing="-1">
+      paper<tspan fill="url(#accent)">2</tspan>slides<tspan fill="#a78bfa">-plus</tspan>
+    </text>
+    <text y="46" font-family="-apple-system, Segoe UI, sans-serif" font-weight="500" font-size="22" fill="#94a3b8" letter-spacing="0.5">
+      Transform any arXiv paper or PDF into beautiful slides — powered by LLMs
+    </text>
+  </g>
+
+  <!-- Top-right tags -->
+  <g font-family="-apple-system, Segoe UI, sans-serif" font-weight="600" font-size="13">
+    <g transform="translate(1080 40)">
+      <rect width="78" height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="39" y="17" text-anchor="middle" fill="#60a5fa">LaTeX</text>
+    </g>
+    <g transform="translate(1166 40)">
+      <rect width="78" height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="39" y="17" text-anchor="middle" fill="#a78bfa">Python</text>
+    </g>
+    <g transform="translate(990 40)">
+      <rect width="84" height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="42" y="17" text-anchor="middle" fill="#22c55e">Streamlit</text>
+    </g>
+  </g>
+</svg>
