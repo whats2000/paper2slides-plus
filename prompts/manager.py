@@ -210,6 +210,7 @@ class PromptManager:
             "interactive_edit",
             "interactive_edit_preamble",
             "interactive_edit_single_slide",
+            "interactive_qa",
             "generate_speaker_notes",
             "edit_speaker_notes",
         ],
@@ -252,6 +253,11 @@ class PromptManager:
             variables["user_instructions"] = user_instructions
             if stage == "interactive_edit_single_slide":
                 variables["frame_number"] = frame_number
+        elif stage == "interactive_qa":
+            variables["beamer_code"] = beamer_code
+            variables["latex_source"] = latex_source
+            variables["user_instructions"] = user_instructions
+            variables["frame_content"] = frame_content or ""
         elif stage == "generate_speaker_notes":
             variables["beamer_code"] = beamer_code
             variables["latex_source"] = latex_source

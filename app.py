@@ -22,6 +22,7 @@ from src.core import (
     search_arxiv,
     edit_slides,
     edit_single_slide,
+    answer_question,
     extract_frames_from_beamer,
     get_frame_by_number,
     replace_frame_in_beamer,
@@ -712,6 +713,9 @@ def main():
     # Single-slide editing mode
     if "edit_mode" not in st.session_state:
         st.session_state.edit_mode = "single"  # "single" or "full"
+    # Chat behavior mode: "edit" rewrites slides, "answer" replies in prose.
+    if "chat_mode" not in st.session_state:
+        st.session_state.chat_mode = "edit"  # "edit" or "answer"
     if "selected_frame_number" not in st.session_state:
         st.session_state.selected_frame_number = 1
     if "total_frames" not in st.session_state:
@@ -719,6 +723,8 @@ def main():
     if "pending_edit" not in st.session_state:
         st.session_state.pending_edit = None
         st.session_state.total_frames = 0
+    if "pending_question" not in st.session_state:
+        st.session_state.pending_question = None
 
     # Revert data for the most recent AI edit (single-level undo). Holds the
     # pre-edit slides.tex content + the chat-message id of the rich success
@@ -1340,40 +1346,11 @@ def main():
             frames = extract_frames_from_beamer(beamer_code)
             st.session_state.total_frames = len(frames)
 
-            # Edit mode selection
-            st.subheader("Edit Mode")
-            edit_mode = st.radio(
-                "Choose editing scope:",
-                options=["Edit Current Page", "Edit All Slides"],
-                index=0
-                if st.session_state.get("edit_mode", "single") == "single"
-                else 1,
-                key="edit_mode_radio",
-                horizontal=True,
-                help="Single page mode: edits only the page shown in slider. All slides: edits entire presentation.",
-            )
-            st.session_state.edit_mode = (
-                "single" if edit_mode == "Edit Current Page" else "full"
-            )
-
-            # Paper context toggle (near editing mode for better UX)
+            # Initialize the paper-context toggle state (the control itself is
+            # rendered next to the chat input below so it stays grouped with
+            # the other chat-behavior controls).
             if "use_paper_context" not in st.session_state:
                 st.session_state.use_paper_context = True
-            st.session_state.use_paper_context = st.checkbox(
-                "📝 Use original paper context when editing",
-                value=st.session_state.use_paper_context,
-                help="When enabled, the LLM will have access to the original paper source during editing, which helps maintain accuracy and consistency with the paper's content and notation. Disable to reduce token usage.",
-                key="use_paper_context_toggle",
-            )
-
-            # Show info based on mode
-            if st.session_state.edit_mode == "single":
-                current_page = get_current_viewer_page(st.session_state.total_frames)
-                st.info(
-                    f"🎯 Editing will only affect slide {current_page} (current page in viewer)"
-                )
-            else:
-                st.info("📄 Editing will affect all slides in the presentation")
 
             with st.expander("✏️ Edit Source (manual)", expanded=False):
                 st.caption(
@@ -1649,27 +1626,125 @@ def main():
                                     else:
                                         st.error("Failed to restore prior version.")
 
-            # Chat input
-            if prompt := st.chat_input("Your instructions to edit the slides..."):
-                # Determine which frame to edit
+            # All chat-behavior controls live together right above the input:
+            # the chat mode (Edit vs Ask) and the scope (current page vs all
+            # slides) both govern how the next prompt is interpreted, so they
+            # belong next to the input rather than buried in an edit-only
+            # section above.
+            mode_col, scope_col = st.columns(2)
+            with mode_col:
+                st.caption("Chat mode")
+                chat_mode_label = st.radio(
+                    "Chat mode",
+                    options=["✏️ Edit Slides", "❓ Ask Questions"],
+                    index=0
+                    if st.session_state.get("chat_mode", "edit") == "edit"
+                    else 1,
+                    key="chat_mode_radio",
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    help=(
+                        "Edit Slides: chat instructions modify slides.tex and recompile. "
+                        "Ask Questions: assistant answers from the current slide and "
+                        "paper content without changing the deck."
+                    ),
+                )
+            with scope_col:
+                st.caption("Scope")
+                scope_label = st.radio(
+                    "Scope",
+                    options=["🎯 Current Page", "📄 All Slides"],
+                    index=0
+                    if st.session_state.get("edit_mode", "single") == "single"
+                    else 1,
+                    key="edit_mode_radio",
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    help=(
+                        "Current Page: targets only the slide shown in the viewer. "
+                        "All Slides: targets the entire presentation."
+                    ),
+                )
+            st.session_state.chat_mode = (
+                "edit" if chat_mode_label == "✏️ Edit Slides" else "answer"
+            )
+            st.session_state.edit_mode = (
+                "single" if scope_label == "🎯 Current Page" else "full"
+            )
+
+            # Paper-context toggle (shared by both edit and ask flows).
+            st.session_state.use_paper_context = st.checkbox(
+                "📝 Use original paper context",
+                value=st.session_state.use_paper_context,
+                help=(
+                    "When enabled, the LLM sees the original paper source as "
+                    "grounding context. Improves accuracy; costs more tokens."
+                ),
+                key="use_paper_context_toggle",
+            )
+
+            # Scope info caption — phrased to fit both modes.
+            if st.session_state.edit_mode == "single":
+                current_page = get_current_viewer_page(st.session_state.total_frames)
+                action_verb = (
+                    "Editing" if st.session_state.chat_mode == "edit" else "Answering"
+                )
+                st.caption(
+                    f"🎯 {action_verb} scoped to slide {current_page} "
+                    "(current page in viewer)"
+                )
+            else:
+                action_verb = (
+                    "Editing" if st.session_state.chat_mode == "edit" else "Answering"
+                )
+                st.caption(f"📄 {action_verb} scoped to all slides")
+
+            # Chat input — placeholder + dispatch depend on the current mode.
+            chat_placeholder = (
+                "Your instructions to edit the slides..."
+                if st.session_state.chat_mode == "edit"
+                else "Ask a question about the current slide or paper..."
+            )
+            if prompt := st.chat_input(chat_placeholder):
+                # Determine which frame is in focus for scope-aware prompts.
                 current_frame = get_current_viewer_page(st.session_state.total_frames)
 
-                # Add message with appropriate prefix
-                if st.session_state.edit_mode == "single":
-                    append_chat_message("user", f"[Page {current_frame}] {prompt}")
-                    st.session_state.pending_edit = {
-                        "frame_number": current_frame,
-                        "instruction": prompt,
-                        "mode": "single",
-                        "already_logged": True,
-                    }
+                if st.session_state.chat_mode == "answer":
+                    # Ask-Questions mode: dispatch a Q&A turn instead of an edit.
+                    if st.session_state.edit_mode == "single":
+                        append_chat_message(
+                            "user", f"❓ [Page {current_frame}] {prompt}"
+                        )
+                        st.session_state.pending_question = {
+                            "frame_number": current_frame,
+                            "question": prompt,
+                            "mode": "single",
+                            "already_logged": True,
+                        }
+                    else:
+                        append_chat_message("user", f"❓ [All Slides] {prompt}")
+                        st.session_state.pending_question = {
+                            "question": prompt,
+                            "mode": "full",
+                            "already_logged": True,
+                        }
                 else:
-                    append_chat_message("user", f"[All Slides] {prompt}")
-                    st.session_state.pending_edit = {
-                        "instruction": prompt,
-                        "mode": "full",
-                        "already_logged": True,
-                    }
+                    # Edit mode (default): existing rewrite-the-slides flow.
+                    if st.session_state.edit_mode == "single":
+                        append_chat_message("user", f"[Page {current_frame}] {prompt}")
+                        st.session_state.pending_edit = {
+                            "frame_number": current_frame,
+                            "instruction": prompt,
+                            "mode": "single",
+                            "already_logged": True,
+                        }
+                    else:
+                        append_chat_message("user", f"[All Slides] {prompt}")
+                        st.session_state.pending_edit = {
+                            "instruction": prompt,
+                            "mode": "full",
+                            "already_logged": True,
+                        }
                 st.rerun()
 
             # Handle pending edit from inline edit boxes (full page view)
@@ -1821,6 +1896,65 @@ def main():
                             "assistant", failed_edit_message, display=False
                         )
                         st.error("Failed to edit slide.")
+
+            # Handle a pending Q&A turn (Ask Questions mode). This branch
+            # never mutates slides.tex — it just calls the LLM with the
+            # current deck (+ paper source) as grounding and appends the
+            # assistant's prose answer to the chat history.
+            if st.session_state.get("pending_question"):
+                q_info = st.session_state.pending_question
+                st.session_state.pending_question = None
+
+                if not q_info.get("already_logged", False):
+                    if q_info.get("mode") == "full":
+                        append_chat_message(
+                            "user",
+                            f"❓ [All Slides] {q_info['question']}",
+                            display=False,
+                        )
+                    else:
+                        append_chat_message(
+                            "user",
+                            f"❓ [Page {q_info['frame_number']}] {q_info['question']}",
+                            display=False,
+                        )
+
+                spinner_label = (
+                    "Thinking about the whole deck..."
+                    if q_info.get("mode") == "full"
+                    else f"Thinking about slide {q_info['frame_number']}..."
+                )
+
+                with st.spinner(spinner_label):
+                    slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
+                    with open(slides_tex_path, "r", encoding="utf-8") as f:
+                        beamer_code = f.read()
+
+                    answer = answer_question(
+                        beamer_code=beamer_code,
+                        question=q_info["question"],
+                        api_key=st.session_state.openai_api_key,
+                        model_name=st.session_state.model_name,
+                        base_url=st.session_state.openai_base_url
+                        if st.session_state.openai_base_url
+                        else None,
+                        paper_id=st.session_state.paper_id,
+                        use_paper_context=st.session_state.use_paper_context,
+                        frame_number=q_info.get("frame_number")
+                        if q_info.get("mode") == "single"
+                        else None,
+                    )
+
+                    if answer:
+                        append_chat_message("assistant", answer, display=False)
+                    else:
+                        append_chat_message(
+                            "assistant",
+                            "❌ Failed to get an answer from the model.",
+                            display=False,
+                        )
+                        st.error("Failed to get an answer from the model.")
+                    st.rerun()
         else:
             st.info(
                 "Interactive editing will be available after successful pipeline completion."
@@ -1897,8 +2031,6 @@ def main():
             st.session_state.pdf_path
             and st.session_state.pipeline_status == "completed"
         ):
-            st.subheader("📄 Generated Slides")
-
             # Buttons row: Download PDF, Generate Speaker Notes, Download Speaker Notes
             col_pdf, col_gen_notes, col_dl_notes = st.columns(3)
 

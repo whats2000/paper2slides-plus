@@ -12,6 +12,7 @@ from .core import (
     search_arxiv,
     edit_slides,
     edit_single_slide,
+    answer_question,
     extract_frames_from_beamer,
     generate_pdf_id,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "search_arxiv",
     "edit_slides",
     "edit_single_slide",
+    "answer_question",
     "extract_frames_from_beamer",
     "generate_pdf_id",
     "get_history_manager",

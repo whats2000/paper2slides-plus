@@ -298,6 +298,84 @@ def edit_single_slide(
         return None
 
 
+def answer_question(
+    beamer_code: str,
+    question: str,
+    api_key: str,
+    model_name: str,
+    base_url: str | None = None,
+    paper_id: str = "",
+    use_paper_context: bool = True,
+    frame_number: int | None = None,
+    workspace_dir: str | None = None,
+) -> str | None:
+    """
+    Answer a user question about the slides / paper without modifying the slides.
+
+    Args:
+        beamer_code: Current Beamer LaTeX code (full presentation).
+        question: User's question.
+        api_key: API key for LLM.
+        model_name: Model name to use.
+        base_url: Optional base URL for API.
+        paper_id: Paper ID used to load the original paper source as grounding.
+        use_paper_context: Whether to include original paper source as context.
+        frame_number: If set, the answer is scoped to this slide (1-indexed,
+            matching PDF page numbers). When None, the answer covers the
+            whole deck.
+        workspace_dir: Workspace directory (defaults to source/{paper_id}/).
+
+    Returns:
+        Markdown answer string, or None on error.
+    """
+    logging.info("Answering user question about the slides/paper...")
+
+    if workspace_dir is None and paper_id:
+        workspace_dir = f"source/{paper_id}/"
+
+    latex_source = ""
+    if use_paper_context and paper_id:
+        latex_source = load_latex_source(workspace_dir)
+        if not latex_source:
+            logging.debug(f"No original paper source found for paper {paper_id}")
+
+    # Handle the frame content based on frame_number. This is what scopes the question to a specific slide or the whole deck.
+    if frame_number is None:
+        frame_content = "(none — the question is about the full presentation)"
+    elif frame_number == 1:
+        frame_content = get_preamble(beamer_code) or "(slide source unavailable)"
+    else:
+        frame_content = (
+            get_frame_by_number(beamer_code, frame_number)
+            or "(slide source unavailable)"
+        )
+
+    system_message, user_prompt = prompt_manager.build_prompt(
+        stage="interactive_qa",
+        beamer_code=beamer_code,
+        latex_source=latex_source,
+        user_instructions=question,
+        frame_content=frame_content,
+    )
+
+    try:
+        answer = call_llm(
+            system_message,
+            user_prompt,
+            api_key,
+            model_name,
+            base_url,
+            extract_code=False,
+        )
+        if not answer:
+            logging.error("LLM returned an empty answer.")
+            return None
+        return answer.strip()
+    except Exception as e:
+        logging.error(f"Error answering question: {e}")
+        return None
+
+
 def _resolve_replaced_page_range(
     pre_edit_frames: list[tuple[int, str, int, int]],
     frame_number: int,

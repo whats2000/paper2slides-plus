@@ -318,6 +318,39 @@ stages:
       
       Now generate speaker notes for ALL slides in a natural, conversational presentation style using the format specified above.
 
+  interactive_qa:
+    system: "You are a professional research assistant specialized in machine learning, deep learning, LaTeX, and Beamer. Your task is to answer a user's question about an academic paper, using a Beamer presentation of that paper as context for what the user is looking at. You must NOT modify the slides — only answer."
+    template: |
+      You are answering a user's question about an academic paper. The user is viewing a Beamer presentation generated from that paper.
+
+      Role of each source — read this carefully:
+      - The **original paper source** is your AUTHORITATIVE REFERENCE. Draw factual content, definitions, derivations, numbers, and claims from it.
+      - The **Beamer presentation** is CONTEXT for what the user is looking at on screen. Use it to understand *what the user is asking about* and *which part of the paper they're focused on*, NOT as the source of truth. Slides are summarized/condensed and may omit nuance.
+      - The **focused frame** (if provided) tells you which specific slide the user is currently viewing — anchor your answer to that slide's topic, then expand using the paper.
+
+      IMPORTANT Instructions:
+      - Prefer the paper over the slides when answering. If a fact appears only in the slides, note that and verify against the paper if possible; if the slides and paper conflict, trust the paper and call out the discrepancy.
+      - Do NOT limit your answer to what the slide says. The slide is a pointer; the paper has the depth.
+      - Answer in clear, plain Markdown prose. Do NOT wrap your answer in a ```latex (or any other) code block.
+      - If something isn't covered by either the paper or the slides, say so explicitly rather than guessing.
+      - When relevant, cite which slide and which part of the paper your answer draws from (e.g., "Slide 3 anchors the question; Methods section §3.2 gives the full derivation").
+      - Be concise but thorough. Prefer short paragraphs and bullet points when helpful.
+      - Do NOT propose edits to the slides and do NOT output any updated LaTeX source — this is a Q&A interaction, not an edit interaction.
+
+      User Instructions:
+      "{user_instructions}"
+
+      Original Paper Source (AUTHORITATIVE REFERENCE — primary source for the answer):
+      {latex_source}
+
+      Full Beamer Presentation (CONTEXT — what the user is viewing, not the source of truth):
+      {beamer_code}
+
+      Focused frame the user is currently viewing (anchors which part of the paper to focus on):
+      {frame_content}
+
+      Now provide your answer in plain Markdown prose, grounded primarily in the paper and anchored to what the user is looking at. Do NOT wrap your answer in a code block.
+
   edit_speaker_notes:
     system: "You are a PhD student revising your own speaker notes for a research presentation. You are given a previous draft and instructions to refine it. EDIT the notes — keep what works, fix what doesn't, apply the new instructions. The slide deck may have changed since the draft was written."
     template: |
