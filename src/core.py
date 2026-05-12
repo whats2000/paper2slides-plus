@@ -308,22 +308,30 @@ def answer_question(
     use_paper_context: bool = True,
     frame_number: int | None = None,
     workspace_dir: str | None = None,
+    chat_history: list[dict] | None = None,
 ) -> str | None:
     """
     Answer a user question about the slides / paper without modifying the slides.
 
+    Runs as a multi-turn conversation: grounding (paper + deck + focused frame)
+    lives in the system message, prior Q&A turns are threaded in as history,
+    and the new question is sent as the latest user turn.
+
     Args:
         beamer_code: Current Beamer LaTeX code (full presentation).
-        question: User's question.
+        question: User's new question.
         api_key: API key for LLM.
         model_name: Model name to use.
         base_url: Optional base URL for API.
         paper_id: Paper ID used to load the original paper source as grounding.
         use_paper_context: Whether to include original paper source as context.
-        frame_number: If set, the answer is scoped to this slide (1-indexed,
-            matching PDF page numbers). When None, the answer covers the
-            whole deck.
+        frame_number: If set, the answer is anchored to this slide (1-indexed,
+            matching PDF page numbers). When None, no specific slide is focused.
         workspace_dir: Workspace directory (defaults to source/{paper_id}/).
+        chat_history: Optional list of prior {"role": "user"|"assistant",
+            "content": str} turns from the same QA conversation. Threaded
+            between the system message and the new question so the model can
+            build on earlier answers.
 
     Returns:
         Markdown answer string, or None on error.
@@ -350,22 +358,26 @@ def answer_question(
             or "(slide source unavailable)"
         )
 
-    system_message, user_prompt = prompt_manager.build_prompt(
+    sys_persona, grounding = prompt_manager.build_prompt(
         stage="interactive_qa",
         beamer_code=beamer_code,
         latex_source=latex_source,
         user_instructions=question,
         frame_content=frame_content,
     )
+    # Fold grounding into the system message so prior_messages can carry the
+    # natural conversation flow without a sentinel "context" user turn.
+    system_message = sys_persona + "\n\n" + grounding
 
     try:
         answer = call_llm(
             system_message,
-            user_prompt,
+            question,
             api_key,
             model_name,
             base_url,
             extract_code=False,
+            prior_messages=chat_history,
         )
         if not answer:
             logging.error("LLM returned an empty answer.")

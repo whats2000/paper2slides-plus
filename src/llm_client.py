@@ -7,6 +7,7 @@ from openai import OpenAI
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
+    ChatCompletionAssistantMessageParam,
     ChatCompletion,
 )
 
@@ -128,6 +129,7 @@ def call_llm(
     base_url: str | None = None,
     extract_code: bool = True,
     code_language: str = "latex",
+    prior_messages: list[dict] | None = None,
 ) -> str | None:
     """
     Call the LLM with system and user messages.
@@ -140,6 +142,9 @@ def call_llm(
         base_url: Optional base URL
         extract_code: Whether to extract code from markdown blocks (default True)
         code_language: Language to extract if extract_code is True (default "latex")
+        prior_messages: Optional list of {"role": "user"|"assistant", "content": str}
+            turns to insert between the system message and the current user
+            prompt. Used to thread chat history into a multi-turn conversation.
 
     Returns:
         Extracted content from response (or raw content if extract_code is False), or None on error
@@ -153,12 +158,33 @@ def call_llm(
         )
         model_to_use = get_model_name(model_name, resolved_base_url)
 
+        messages: list = [
+            ChatCompletionSystemMessageParam(content=system_message, role="system"),
+        ]
+        if prior_messages:
+            for m in prior_messages:
+                role = m.get("role")
+                content = m.get("content", "")
+                if not content:
+                    continue
+                if role == "user":
+                    messages.append(
+                        ChatCompletionUserMessageParam(content=content, role="user")
+                    )
+                elif role == "assistant":
+                    messages.append(
+                        ChatCompletionAssistantMessageParam(
+                            content=content, role="assistant"
+                        )
+                    )
+                # Silently skip unknown roles (e.g. "system" inside history).
+        messages.append(
+            ChatCompletionUserMessageParam(content=user_prompt, role="user")
+        )
+
         response = client.chat.completions.create(
             model=model_to_use,
-            messages=[
-                ChatCompletionSystemMessageParam(content=system_message, role="system"),
-                ChatCompletionUserMessageParam(content=user_prompt, role="user"),
-            ],
+            messages=messages,
         )
 
         if extract_code:

@@ -214,6 +214,55 @@ def append_chat_message(role: str, content: str, display: bool = True):
             st.markdown(content)
 
 
+def collect_qa_history(
+    messages: list[dict], max_turns: int = 12, exclude_last: int = 0
+) -> list[dict]:
+    """
+    Walk the unified chat log and pull out the user-question ↔ assistant-answer
+    pairs from the Ask-Questions mode, so they can be threaded back into the
+    next QA call as conversation context.
+
+    QA user turns are marked with a leading "❓" prefix (added when dispatched
+    in answer mode). The assistant reply is the next assistant message that is
+    NOT an edit success (`type == "ai_edit"`) and not a revert/error sentinel.
+    Edit-mode turns and edit-success messages are skipped entirely so the QA
+    thread stays clean.
+
+    Args:
+        messages: The full chat log (`st.session_state.messages`).
+        max_turns: Cap on the number of messages returned (most recent kept).
+        exclude_last: Drop this many trailing messages first (used to exclude
+            the brand-new user question that was just appended and shouldn't
+            also appear in `prior_messages`).
+    """
+    log = messages[: len(messages) - exclude_last] if exclude_last else list(messages)
+
+    pairs: list[dict] = []
+    i = 0
+    while i < len(log):
+        m = log[i]
+        if m["role"] == "user" and m["content"].lstrip().startswith("❓"):
+            user_content = m["content"]
+            if i + 1 < len(log):
+                nxt = log[i + 1]
+                is_assistant = nxt["role"] == "assistant"
+                is_edit_success = nxt.get("type") == "ai_edit"
+                stripped = nxt["content"].lstrip()
+                is_sentinel = stripped.startswith(("↩️", "❌"))
+                if is_assistant and not is_edit_success and not is_sentinel:
+                    pairs.append({"role": "user", "content": user_content})
+                    pairs.append(
+                        {"role": "assistant", "content": nxt["content"]}
+                    )
+                    i += 2
+                    continue
+        i += 1
+
+    if max_turns > 0 and len(pairs) > max_turns:
+        pairs = pairs[-max_turns:]
+    return pairs
+
+
 def display_pdf(file_path):
     with open(file_path, "rb") as f:
         base64_pdf = base64.b64encode(f.read()).decode("utf-8")
@@ -1930,6 +1979,14 @@ def main():
                     with open(slides_tex_path, "r", encoding="utf-8") as f:
                         beamer_code = f.read()
 
+                    # Thread prior QA turns so this feels like a real
+                    # conversation. The brand-new user question was just
+                    # appended above, so exclude_last=1 keeps it out of the
+                    # history (it's already going in as the live user turn).
+                    qa_history = collect_qa_history(
+                        st.session_state.messages, exclude_last=1
+                    )
+
                     answer = answer_question(
                         beamer_code=beamer_code,
                         question=q_info["question"],
@@ -1943,6 +2000,7 @@ def main():
                         frame_number=q_info.get("frame_number")
                         if q_info.get("mode") == "single"
                         else None,
+                        chat_history=qa_history,
                     )
 
                     if answer:
