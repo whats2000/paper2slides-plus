@@ -1584,23 +1584,9 @@ def main():
 
             st.divider()
 
-            # Chat history header with clear button
-            chat_header_col1, chat_header_col2 = st.columns([4, 1])
-            with chat_header_col1:
-                st.subheader(f"💬 Chat History ({len(st.session_state.messages)})")
-            with chat_header_col2:
-                if st.button(
-                    "🗑️ Clear",
-                    key="clear_chat_history",
-                    help="Clear chat history (UI only, does not affect slides)",
-                    disabled=not st.session_state.messages,
-                    width="stretch",
-                ):
-                    st.session_state.messages = []
-                    # Drop revert state too — once the ai_edit message is gone
-                    # there's no UI to surface the Revert button.
-                    st.session_state.latest_edit_revert = None
-                    st.rerun()
+            # Chat history header (Clear button lives next to the
+            # paper-context checkbox below, beside the input controls).
+            st.subheader(f"💬 Chat History ({len(st.session_state.messages)})")
 
             # Display chat messages. Rich "ai_edit" messages render the success
             # text plus a collapsed diff expander; the most recent ai_edit also
@@ -1721,16 +1707,33 @@ def main():
                 "single" if scope_label == "🎯 Current Page" else "full"
             )
 
-            # Paper-context toggle (shared by both edit and ask flows).
-            st.session_state.use_paper_context = st.checkbox(
-                "📝 Use original paper context",
-                value=st.session_state.use_paper_context,
-                help=(
-                    "When enabled, the LLM sees the original paper source as "
-                    "grounding context. Improves accuracy; costs more tokens."
-                ),
-                key="use_paper_context_toggle",
-            )
+            # Paper-context toggle on the left, Clear-chat on the far right
+            # (space-between layout so both chat-behavior controls share the
+            # same row above the input).
+            ctx_col, clear_col = st.columns([4, 1])
+            with ctx_col:
+                st.session_state.use_paper_context = st.checkbox(
+                    "📝 Use original paper context",
+                    value=st.session_state.use_paper_context,
+                    help=(
+                        "When enabled, the LLM sees the original paper source as "
+                        "grounding context. Improves accuracy; costs more tokens."
+                    ),
+                    key="use_paper_context_toggle",
+                )
+            with clear_col:
+                if st.button(
+                    "🗑️ Clear",
+                    key="clear_chat_history",
+                    help="Clear chat history (UI only, does not affect slides)",
+                    disabled=not st.session_state.messages,
+                    width="stretch",
+                ):
+                    st.session_state.messages = []
+                    # Drop revert state too — once the ai_edit message is gone
+                    # there's no UI to surface the Revert button.
+                    st.session_state.latest_edit_revert = None
+                    st.rerun()
 
             # Scope info caption — phrased to fit both modes.
             if st.session_state.edit_mode == "single":
