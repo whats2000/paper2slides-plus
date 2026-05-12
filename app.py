@@ -1141,6 +1141,19 @@ def main():
                                 project_dir = os.path.join("source", project["id"])
                                 if os.path.exists(project_dir):
                                     shutil.rmtree(project_dir)
+                                    # If the deleted project is currently active,
+                                    # clear project-bound session state so the
+                                    # main view doesn't try to open missing files.
+                                    if st.session_state.paper_id == project["id"]:
+                                        st.session_state.paper_id = None
+                                        st.session_state.arxiv_id = None
+                                        st.session_state.uploaded_pdf_path = None
+                                        st.session_state.latex_zip_path = None
+                                        st.session_state.pdf_path = None
+                                        st.session_state.pipeline_status = "ready"
+                                        st.session_state.messages = []
+                                        st.session_state.latest_edit_revert = None
+                                        st.session_state.pending_edit = None
                                     st.rerun()
 
         st.header("Pipeline Settings")
