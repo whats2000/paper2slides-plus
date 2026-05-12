@@ -214,6 +214,28 @@ def append_chat_message(role: str, content: str, display: bool = True):
             st.markdown(content)
 
 
+_SCOPE_LABELS = ["🎯 Current Page", "📄 All Slides"]
+
+
+def _scope_label_to_mode(label: str) -> str:
+    """Map a scope-radio display label to the canonical edit_mode value."""
+    return "single" if label == _SCOPE_LABELS[0] else "full"
+
+
+def _sync_scope_from_chat() -> None:
+    """Chat-area scope radio → update edit_mode + mirror to manual editor radio."""
+    label = st.session_state.edit_mode_radio
+    st.session_state.edit_mode = _scope_label_to_mode(label)
+    st.session_state.manual_scope_radio = label
+
+
+def _sync_scope_from_manual() -> None:
+    """Manual-editor scope radio → update edit_mode + mirror to chat radio."""
+    label = st.session_state.manual_scope_radio
+    st.session_state.edit_mode = _scope_label_to_mode(label)
+    st.session_state.edit_mode_radio = label
+
+
 def collect_qa_history(
     messages: list[dict], max_turns: int = 12, exclude_last: int = 0
 ) -> list[dict]:
@@ -1406,6 +1428,29 @@ def main():
                     "Directly edit LaTeX source. Changes are saved to slides.tex and compiled."
                 )
 
+                # Mirror of the chat-area Scope radio — placed here so users
+                # inside the manual editor can switch between single-slide
+                # and full-deck targeting without scrolling down to the chat
+                # input. Both radios write to st.session_state.edit_mode via
+                # on_change callbacks, so flipping one updates the other.
+                seeded_label_inner = (
+                    _SCOPE_LABELS[0]
+                    if st.session_state.get("edit_mode", "single") == "single"
+                    else _SCOPE_LABELS[1]
+                )
+                st.session_state.setdefault("manual_scope_radio", seeded_label_inner)
+                st.radio(
+                    "Scope",
+                    options=_SCOPE_LABELS,
+                    key="manual_scope_radio",
+                    on_change=_sync_scope_from_manual,
+                    horizontal=True,
+                    help=(
+                        "Switch between editing the current slide only or the "
+                        "entire slides.tex. Synced with the chat Scope toggle."
+                    ),
+                )
+
                 current_page = get_current_viewer_page(st.session_state.total_frames)
                 file_mtime = (
                     int(os.path.getmtime(slides_tex_path))
@@ -1686,25 +1731,32 @@ def main():
                 )
             with scope_col:
                 st.caption("Scope")
-                scope_label = st.radio(
-                    "Scope",
-                    options=["🎯 Current Page", "📄 All Slides"],
-                    index=0
+                # Seed both scope-radio widget keys from edit_mode so the two
+                # mirrored radios (chat-area + manual editor) stay in sync the
+                # first time they render. After that, on_change callbacks keep
+                # them aligned bidirectionally.
+                seeded_label = (
+                    _SCOPE_LABELS[0]
                     if st.session_state.get("edit_mode", "single") == "single"
-                    else 1,
+                    else _SCOPE_LABELS[1]
+                )
+                st.session_state.setdefault("edit_mode_radio", seeded_label)
+                st.session_state.setdefault("manual_scope_radio", seeded_label)
+                st.radio(
+                    "Scope",
+                    options=_SCOPE_LABELS,
                     key="edit_mode_radio",
+                    on_change=_sync_scope_from_chat,
                     horizontal=True,
                     label_visibility="collapsed",
                     help=(
                         "Current Page: targets only the slide shown in the viewer. "
-                        "All Slides: targets the entire presentation."
+                        "All Slides: targets the entire presentation. "
+                        "Mirrored inside the manual-edit expander above."
                     ),
                 )
             st.session_state.chat_mode = (
                 "edit" if chat_mode_label == "✏️ Edit Slides" else "answer"
-            )
-            st.session_state.edit_mode = (
-                "single" if scope_label == "🎯 Current Page" else "full"
             )
 
             # Paper-context toggle on the left, Clear-chat on the far right
