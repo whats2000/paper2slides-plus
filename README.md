@@ -17,6 +17,7 @@ This project is a further development based on the original [paper2slides](https
 7. **`BASE_URL` overwrite for custom LLM providers**
 8. **An API version for integration with other apps**
 9. **Docker for easy deployment**
+10. **Chat with the paper — Ask Questions mode**
 
 ---
 
@@ -132,6 +133,7 @@ For programmatic access or integration with other applications, use the FastAPI 
    - Tracking job status
    - Downloading generated slides (PDF/LaTeX)
    - Editing slides and generating speaker notes
+   - Asking questions about the slides / paper
    - Multi-user workspace isolation
 
 ## Quick Start
@@ -227,6 +229,7 @@ streamlit run app.py
   - **Page Range Selection**: When uploading a PDF, you can optionally specify a page range to process only a specific section (e.g., a chapter from a book). This is useful for long documents.
 - Click "Run Full Pipeline" to generate slides and compile the PDF, or use "Generate Only" / "Compile Only".
 - After the pipeline completes, you can interactively edit the slides in the left panel; changes are recompiled automatically.
+- **Chat modes** — above the chat input, choose between **✏️ Edit Slides** (your instruction rewrites the deck and recompiles) and **❓ Ask Questions** (the assistant answers questions about the paper grounded in the original source, without modifying the deck). Use the **Scope** toggle next to it to either anchor to the current slide or address the whole deck. The Q&A conversation has memory within the session — follow-up questions build on prior answers.
 
 ## How does it work?
 
