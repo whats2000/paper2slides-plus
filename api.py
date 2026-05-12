@@ -25,7 +25,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Query
@@ -40,6 +40,7 @@ from src.core import (
     generate_pdf_id,
     edit_slides,
     edit_single_slide,
+    answer_question,
     generate_speaker_notes,
     save_speaker_notes_with_history,
     load_speaker_notes,
@@ -299,6 +300,57 @@ class EditSingleSlideRequest(BaseModel):
     use_paper_context: bool = Field(
         default=True, description="Include original paper context"
     )
+
+
+class QATurn(BaseModel):
+    """A single prior turn in an ongoing Q&A conversation."""
+
+    role: Literal["user", "assistant"] = Field(
+        ..., description="Who produced this turn"
+    )
+    content: str = Field(..., description="The text of this turn")
+
+
+class AskQuestionRequest(BaseModel):
+    """Request model for asking a question about the slides / paper."""
+
+    question: str = Field(..., description="The user's question")
+    slide_number: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description=(
+            "1-indexed slide the question is focused on. When omitted, the "
+            "answer covers the full deck."
+        ),
+    )
+    chat_history: Optional[list[QATurn]] = Field(
+        default=None,
+        description=(
+            "Prior turns of this Q&A conversation (oldest first). Threaded into "
+            "the model call so follow-ups can build on earlier answers."
+        ),
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description="API key (optional, uses server default if not provided)",
+    )
+    model_name: Optional[str] = Field(default=None, description="LLM model to use")
+    base_url: Optional[str] = Field(default=None, description="Custom API base URL")
+    use_paper_context: bool = Field(
+        default=True,
+        description="Include the original paper source as grounding context",
+    )
+
+
+class AskQuestionResponse(BaseModel):
+    """Response model for /ask."""
+
+    success: bool
+    answer: Optional[str] = None
+    user_id: str
+    paper_id: str
+    slide_number: Optional[int] = None
+    error: Optional[str] = None
 
 
 class SpeakerNotesRequest(BaseModel):
@@ -1049,6 +1101,89 @@ async def edit_single_slide_endpoint(
     except Exception as e:
         logger.error(
             f"Failed to edit slide {slide_number} for job ({user_id}, {paper_id}): {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/ask/{user_id}/{paper_id}",
+    response_model=AskQuestionResponse,
+    tags=["Ask"],
+)
+async def ask_question_endpoint(
+    user_id: str,
+    paper_id: str,
+    request: AskQuestionRequest,
+):
+    """
+    Answer a question about the slides / underlying paper without modifying
+    the deck.
+
+    The Beamer deck is loaded as context, the original paper source is loaded
+    as the authoritative reference (when `use_paper_context` is true), and any
+    `chat_history` turns are threaded in so follow-up questions can build on
+    earlier answers. When `slide_number` is provided, the answer is anchored
+    to that specific slide.
+    """
+    workspace_dir = get_workspace_dir(user_id, paper_id)
+
+    slides_path = os.path.join(workspace_dir, "slides.tex")
+    if not os.path.exists(slides_path):
+        raise HTTPException(status_code=404, detail="Slides file not found")
+
+    try:
+        beamer_code = read_file(slides_path)
+
+        api_key = request.api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="API key required")
+
+        model_name = request.model_name or os.getenv(
+            "DEFAULT_MODEL", "gpt-4.1-2025-04-14"
+        )
+
+        history_dicts = (
+            [turn.model_dump() for turn in request.chat_history]
+            if request.chat_history
+            else None
+        )
+
+        answer = await asyncio.to_thread(
+            answer_question,
+            beamer_code,
+            request.question,
+            api_key,
+            model_name,
+            request.base_url,
+            paper_id,
+            request.use_paper_context,
+            request.slide_number,
+            workspace_dir,
+            history_dicts,
+        )
+
+        if not answer:
+            return AskQuestionResponse(
+                success=False,
+                user_id=user_id,
+                paper_id=paper_id,
+                slide_number=request.slide_number,
+                error="Model returned an empty answer",
+            )
+
+        return AskQuestionResponse(
+            success=True,
+            answer=answer,
+            user_id=user_id,
+            paper_id=paper_id,
+            slide_number=request.slide_number,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to answer question for job ({user_id}, {paper_id}): {e}"
         )
         raise HTTPException(status_code=500, detail=str(e))
 
