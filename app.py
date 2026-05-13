@@ -1101,7 +1101,7 @@ def main():
                     col1, col2 = st.columns([5, 1])
                     with col1:
                         if st.button(
-                            "📂 Load Selected Project",
+                            "📂 Load Project",
                             key="load_project_btn",
                             use_container_width=True,
                         ):
@@ -1419,8 +1419,6 @@ def main():
                         ):
                             st.session_state[clear_key] = False
                             st.rerun()
-
-            st.divider()
 
             # Read slides to get total frame count
             slides_tex_path = f"source/{st.session_state.paper_id}/slides.tex"
