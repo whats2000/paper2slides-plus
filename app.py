@@ -273,9 +273,7 @@ def collect_qa_history(
                 is_sentinel = stripped.startswith(("↩️", "❌"))
                 if is_assistant and not is_edit_success and not is_sentinel:
                     pairs.append({"role": "user", "content": user_content})
-                    pairs.append(
-                        {"role": "assistant", "content": nxt["content"]}
-                    )
+                    pairs.append({"role": "assistant", "content": nxt["content"]})
                     i += 2
                     continue
         i += 1

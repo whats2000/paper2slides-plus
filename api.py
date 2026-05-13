@@ -1182,9 +1182,7 @@ async def ask_question_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(
-            f"Failed to answer question for job ({user_id}, {paper_id}): {e}"
-        )
+        logger.error(f"Failed to answer question for job ({user_id}, {paper_id}): {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
