@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-# Install system dependencies for LaTeX compilation
+# Install system dependencies for LaTeX compilation and PDF processing
 RUN apt-get update && apt-get install -y \
     texlive-latex-base \
     texlive-latex-recommended \
@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
     texlive-fonts-extra \
     texlive-lang-all \
     texlive-science \
+    latexmk \
+    chktex \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster and safer Python package management
