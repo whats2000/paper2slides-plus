@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     texlive-fonts-recommended \
     texlive-fonts-extra \
     texlive-lang-all \
+    texlive-science \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster and safer Python package management
